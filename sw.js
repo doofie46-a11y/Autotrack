@@ -1,10 +1,10 @@
-const CACHE = 'autotrack-v1';
+const CACHE = 'autotrack-v2';
 const ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
+  '/Autotrack/',
+  '/Autotrack/index.html',
+  '/Autotrack/manifest.json',
+  '/Autotrack/icon-192.png',
+  '/Autotrack/icon-512.png',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap'
 ];
 
