@@ -931,15 +931,78 @@ select.form-control { cursor: pointer; }
   </div>
 </div>
 
+<!-- LOADER -->
+<div id="loaderOverlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(15,25,35,.85);align-items:center;justify-content:center;flex-direction:column;gap:12px;backdrop-filter:blur(4px);">
+  <div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;"></div>
+  <div id="loaderMsg" style="font-size:.85rem;color:var(--text2)">Caricamento…</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script>
+<script type="module">
 // ══════════════════════════════════════════════════════
-//  DATA LAYER — IndexedDB
+//  DATA LAYER — Firebase Firestore
 // ══════════════════════════════════════════════════════
-const DB_NAME = 'AutoTrackDB', DB_VER = 2;
-let db;
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDoKRfu0uV9MGyJluAKOkLh-F85IKzOnCA",
+  authDomain: "autotrack-8bb15.firebaseapp.com",
+  projectId: "autotrack-8bb15",
+  storageBucket: "autotrack-8bb15.firebasestorage.app",
+  messagingSenderId: "1070522773614",
+  appId: "1:1070522773614:web:3eca43b1b3b1656e43367f"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const fdb = getFirestore(fbApp);
+
+// Collezioni Firestore
+const CARS_COL = 'cars';
+const EVENTS_COL = 'events';
+const SETTINGS_COL = 'settings';
+
+// ── Wrapper Firestore compatibili con il resto del codice ──
+
+async function dbGetAll(store) {
+  const snap = await getDocs(collection(fdb, store));
+  return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+}
+
+async function dbGet(store, key) {
+  const snap = await getDoc(doc(fdb, store, String(key)));
+  if (!snap.exists()) return undefined;
+  return { ...snap.data(), id: snap.id };
+}
+
+async function dbAdd(store, obj) {
+  const { id: _ignore, ...data } = obj;
+  const ref = await addDoc(collection(fdb, store), { ...data, _ts: Date.now() });
+  return ref.id;
+}
+
+async function dbPut(store, obj) {
+  const { id, ...data } = obj;
+  await setDoc(doc(fdb, store, String(id)), { ...data, _ts: Date.now() });
+  return id;
+}
+
+async function dbDelete(store, key) {
+  await deleteDoc(doc(fdb, store, String(key)));
+}
+
+// Funzione di loading con spinner
+function showLoader(msg = 'Caricamento…') {
+  document.getElementById('loaderOverlay').style.display = 'flex';
+  document.getElementById('loaderMsg').textContent = msg;
+}
+function hideLoader() {
+  document.getElementById('loaderOverlay').style.display = 'none';
+}
 
 const defaultParts = [
   'Olio motore','Filtro olio','Filtro aria','Filtro abitacolo','Filtro carburante',
@@ -958,63 +1021,6 @@ const defaultCategories = [
   'Altro'
 ];
 
-function openDB() {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, DB_VER);
-    req.onupgradeneeded = e => {
-      const d = e.target.result;
-      if (!d.objectStoreNames.contains('cars'))
-        d.createObjectStore('cars', { keyPath: 'id', autoIncrement: true });
-      if (!d.objectStoreNames.contains('events'))
-        d.createObjectStore('events', { keyPath: 'id', autoIncrement: true });
-      if (!d.objectStoreNames.contains('settings'))
-        d.createObjectStore('settings', { keyPath: 'key' });
-    };
-    req.onsuccess = e => { db = e.target.result; res(db); };
-    req.onerror = () => rej(req.error);
-  });
-}
-
-function dbGet(store, key) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readonly');
-    const req = tx.objectStore(store).get(key);
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
-  });
-}
-function dbGetAll(store) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readonly');
-    const req = tx.objectStore(store).getAll();
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
-  });
-}
-function dbPut(store, obj) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).put(obj);
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
-  });
-}
-function dbAdd(store, obj) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).add(obj);
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
-  });
-}
-function dbDelete(store, key) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).delete(key);
-    req.onsuccess = () => res();
-    req.onerror = () => rej(req.error);
-  });
-}
 
 // ══════════════════════════════════════════════════════
 //  APP STATE
@@ -1030,19 +1036,19 @@ let state = {
 };
 
 async function loadAll() {
-  state.cars = await dbGetAll('cars');
-  state.events = await dbGetAll('events');
-  const ps = await dbGet('settings', 'parts');
+  state.cars = await dbGetAll(CARS_COL);
+  state.events = await dbGetAll(EVENTS_COL);
+  const ps = await dbGet(SETTINGS_COL, 'parts');
   if (ps) state.parts = ps.value;
-  const cs = await dbGet('settings', 'categories');
+  const cs = await dbGet(SETTINGS_COL, 'categories');
   if (cs) state.categories = cs.value;
   if (state.cars.length > 0 && !state.currentCarId)
     state.currentCarId = state.cars[0].id;
 }
 
 async function saveSettings() {
-  await dbPut('settings', { key: 'parts', value: state.parts });
-  await dbPut('settings', { key: 'categories', value: state.categories });
+  await dbPut(SETTINGS_COL, { id: 'parts', key: 'parts', value: state.parts });
+  await dbPut(SETTINGS_COL, { id: 'categories', key: 'categories', value: state.categories });
 }
 
 // ══════════════════════════════════════════════════════
@@ -1167,17 +1173,19 @@ async function saveKm() {
   if (!km || !data) { showToast('⚠️ KM e data obbligatori'); return; }
   const car = state.cars.find(c => c.id === state.currentCarId);
   if (!car) return;
+  showLoader('Salvataggio…');
   if (parseInt(km) > parseInt(car.km || 0)) {
     car.km = km; car.km_data = data;
-    await dbPut('cars', car);
+    await dbPut(CARS_COL, car);
   }
-  await dbAdd('events', {
+  await dbAdd(EVENTS_COL, {
     carId: state.currentCarId, type: 'km',
     data, km: parseInt(km), note, prezzo: null,
     created: Date.now()
   });
-  state.cars = await dbGetAll('cars');
-  state.events = await dbGetAll('events');
+  state.cars = await dbGetAll(CARS_COL);
+  state.events = await dbGetAll(EVENTS_COL);
+  hideLoader();
   closeModal('modalKm');
   renderGarage();
   showToast('📍 KM aggiornato');
@@ -1214,15 +1222,17 @@ async function saveCar() {
     km: document.getElementById('car_km').value,
     km_data: document.getElementById('car_km_data').value || today(),
   };
+  showLoader('Salvataggio…');
   if (state.editingCarId) {
     car.id = state.editingCarId;
-    await dbPut('cars', car);
+    await dbPut(CARS_COL, car);
     state.editingCarId = null;
   } else {
-    const newId = await dbAdd('cars', car);
+    const newId = await dbAdd(CARS_COL, car);
     state.currentCarId = newId;
   }
-  state.cars = await dbGetAll('cars');
+  state.cars = await dbGetAll(CARS_COL);
+  hideLoader();
   closeModal('modalCar');
   resetCarForm();
   renderGarage();
@@ -1240,10 +1250,13 @@ function resetCarForm() {
 
 async function deleteCar(id) {
   if (!confirm('Eliminare la vettura e tutti i suoi eventi?')) return;
-  await dbDelete('cars', id);
-  state.events.filter(e => e.carId === id).forEach(e => dbDelete('events', e.id));
-  state.cars = await dbGetAll('cars');
-  state.events = await dbGetAll('events');
+  showLoader('Eliminazione…');
+  await dbDelete(CARS_COL, id);
+  const toDelete = state.events.filter(e => e.carId === id);
+  for (const e of toDelete) await dbDelete(EVENTS_COL, e.id);
+  state.cars = await dbGetAll(CARS_COL);
+  state.events = await dbGetAll(EVENTS_COL);
+  hideLoader();
   if (state.currentCarId === id)
     state.currentCarId = state.cars.length ? state.cars[0].id : null;
   renderGarage();
@@ -1362,7 +1375,8 @@ async function saveFuel() {
   const litri = document.getElementById('fuel_litri').value;
   const totale = document.getElementById('fuel_totale').value;
   if (!data || !km || !litri || !totale) { showToast('⚠️ Campi obbligatori mancanti'); return; }
-  await dbAdd('events', {
+  showLoader('Salvataggio…');
+  await dbAdd(EVENTS_COL, {
     carId: state.currentCarId, type: 'fuel',
     data, km: parseInt(km), litri: parseFloat(litri),
     prezzo_litro: parseFloat(document.getElementById('fuel_prezzo_litro').value) || null,
@@ -1372,7 +1386,8 @@ async function saveFuel() {
     note: document.getElementById('fuel_note').value,
     created: Date.now()
   });
-  state.events = await dbGetAll('events');
+  state.events = await dbGetAll(EVENTS_COL);
+  hideLoader();
   closeModal('modalFuel');
   renderMovimenti();
   showToast('⛽ Rifornimento salvato!');
@@ -1434,7 +1449,8 @@ async function saveService() {
   const km = document.getElementById('svc_km').value;
   const prezzo = document.getElementById('svc_prezzo').value;
   if (!data || !km || !prezzo) { showToast('⚠️ Data, KM e prezzo obbligatori'); return; }
-  await dbAdd('events', {
+  showLoader('Salvataggio…');
+  await dbAdd(EVENTS_COL, {
     carId: state.currentCarId, type: 'service',
     data, km: parseInt(km), prezzo: parseFloat(prezzo),
     tipo: document.getElementById('svc_tipo').value,
@@ -1443,7 +1459,8 @@ async function saveService() {
     note: document.getElementById('svc_note').value,
     created: Date.now()
   });
-  state.events = await dbGetAll('events');
+  state.events = await dbGetAll(EVENTS_COL);
+  hideLoader();
   closeModal('modalService');
   state.selectedParts = [];
   renderMovimenti();
@@ -1467,7 +1484,8 @@ async function saveTyre() {
   const misura = document.getElementById('tyre_misura').value;
   const prezzo = document.getElementById('tyre_prezzo').value;
   if (!data || !km || !prezzo) { showToast('⚠️ Campi obbligatori mancanti'); return; }
-  await dbAdd('events', {
+  showLoader('Salvataggio…');
+  await dbAdd(EVENTS_COL, {
     carId: state.currentCarId, type: 'tyre',
     data, km: parseInt(km), prezzo: parseFloat(prezzo),
     marca_pneum, misura,
@@ -1477,7 +1495,8 @@ async function saveTyre() {
     note: document.getElementById('tyre_note').value,
     created: Date.now()
   });
-  state.events = await dbGetAll('events');
+  state.events = await dbGetAll(EVENTS_COL);
+  hideLoader();
   closeModal('modalTyre');
   renderMovimenti();
   showToast('🔄 Cambio pneumatici salvato!');
@@ -1497,7 +1516,8 @@ async function saveOther() {
   const prezzo = document.getElementById('oth_prezzo').value;
   const descrizione = document.getElementById('oth_desc').value;
   if (!data || !prezzo || !descrizione) { showToast('⚠️ Data, descrizione e prezzo obbligatori'); return; }
-  await dbAdd('events', {
+  showLoader('Salvataggio…');
+  await dbAdd(EVENTS_COL, {
     carId: state.currentCarId, type: 'other',
     data, km: parseInt(document.getElementById('oth_km').value) || null,
     prezzo: parseFloat(prezzo),
@@ -1506,7 +1526,8 @@ async function saveOther() {
     note: document.getElementById('oth_note').value,
     created: Date.now()
   });
-  state.events = await dbGetAll('events');
+  state.events = await dbGetAll(EVENTS_COL);
+  hideLoader();
   closeModal('modalOther');
   renderMovimenti();
   showToast('📝 Spesa salvata!');
@@ -1553,8 +1574,10 @@ function showEventDetail(id) {
 
 async function deleteEvent(id) {
   if (!confirm('Eliminare questo evento?')) return;
-  await dbDelete('events', id);
-  state.events = await dbGetAll('events');
+  showLoader('Eliminazione…');
+  await dbDelete(EVENTS_COL, id);
+  state.events = await dbGetAll(EVENTS_COL);
+  hideLoader();
   closeModal('modalDetail');
   renderMovimenti();
   showToast('🗑 Evento eliminato');
@@ -1737,12 +1760,14 @@ function exportData() {
 async function resetData() {
   if (!confirm('⚠️ Eliminare TUTTI i dati? Questa operazione è irreversibile!')) return;
   if (!confirm('Sei sicuro? Verranno eliminate tutte le vetture e gli eventi.')) return;
-  const all = await dbGetAll('cars');
-  for (const c of all) await dbDelete('cars', c.id);
-  const allE = await dbGetAll('events');
-  for (const e of allE) await dbDelete('events', e.id);
+  showLoader('Reset in corso…');
+  const allC = await dbGetAll(CARS_COL);
+  for (const c of allC) await dbDelete(CARS_COL, c.id);
+  const allE = await dbGetAll(EVENTS_COL);
+  for (const e of allE) await dbDelete(EVENTS_COL, e.id);
   state.cars = []; state.events = [];
   state.currentCarId = null;
+  hideLoader();
   renderGarage();
   showToast('🗑 Dati eliminati');
 }
@@ -1795,8 +1820,9 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 document.getElementById('car_km_data').value = today();
 
 async function init() {
-  await openDB();
+  showLoader('Connessione a Firebase…');
   await loadAll();
+  hideLoader();
   renderGarage();
 }
 
