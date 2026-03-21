@@ -1123,7 +1123,7 @@ function renderGarage() {
     const evs = carEvents(car.id);
     const totSpesa = evs.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
     const isSel = car.id === state.currentCarId;
-    return `<div class="car-card ${isSel ? 'selected' : ''}" onclick="selectCar(${car.id})">
+    return `<div class="car-card ${isSel ? 'selected' : ''}" onclick="selectCar('${car.id}')">
       <div class="flex-between">
         <div class="car-card-name">${car.marca} ${car.modello}</div>
         ${isSel ? '<span class="car-badge gold">✓ Attiva</span>' : ''}
@@ -1138,9 +1138,9 @@ function renderGarage() {
         <span class="text-sm text-muted">${evs.length} eventi · ${fmtEuro(totSpesa)}</span>
       </div>
       <div class="car-card-actions">
-        <button class="btn btn-sm" onclick="event.stopPropagation();editCar(${car.id})">✏️ Modifica</button>
-        <button class="btn btn-sm blue" onclick="event.stopPropagation();openKmModal(${car.id})">📍 KM</button>
-        <button class="btn btn-sm danger" onclick="event.stopPropagation();deleteCar(${car.id})">🗑</button>
+        <button class="btn btn-sm" onclick="event.stopPropagation();editCar('${car.id}')">✏️ Modifica</button>
+        <button class="btn btn-sm blue" onclick="event.stopPropagation();openKmModal('${car.id}')">📍 KM</button>
+        <button class="btn btn-sm danger" onclick="event.stopPropagation();deleteCar('${car.id}')">🗑</button>
       </div>
     </div>`;
   }).join('');
@@ -1154,6 +1154,7 @@ function renderGarage() {
 
 function selectCar(id) {
   state.currentCarId = id;
+  window.state = state;
   renderGarage();
   showToast('✅ Vettura selezionata');
 }
@@ -1282,7 +1283,7 @@ function renderMovimenti() {
   // Car selector tabs
   selectorEl.innerHTML = `<div class="tabs" style="margin-bottom:16px">
     ${state.cars.map(c => `<button class="tab-btn ${c.id === state.currentCarId ? 'active' : ''}"
-      onclick="state.currentCarId=${c.id};renderMovimenti()">
+      onclick="selectCar('${c.id}');renderMovimenti()">
       ${c.marca} ${c.modello}
     </button>`).join('')}
   </div>`;
@@ -1348,7 +1349,7 @@ function eventItem(e) {
     title = e.descrizione || e.categoria || 'Spesa';
   }
 
-  return `<div class="event-item" onclick="showEventDetail(${e.id})">
+  return `<div class="event-item" onclick="showEventDetail('${e.id}')">
     <div class="event-icon ${e.type}">
       <span>${icons[e.type] || '📌'}</span>
     </div>
@@ -1568,7 +1569,7 @@ function showEventDetail(id) {
   }
   if (e.note) html += `<div class="summary-row"><span class="label">Note</span><span class="value" style="max-width:60%;text-align:right;font-size:0.8rem">${e.note}</span></div>`;
   document.getElementById('detailBody').innerHTML = html;
-  document.getElementById('detailDeleteBtn').onclick = () => deleteEvent(id);
+  document.getElementById('detailDeleteBtn').onclick = () => deleteEvent(e.id);
   openModal('modalDetail');
 }
 
@@ -1864,6 +1865,7 @@ window.addCustomCategory = addCustomCategory;
 window.removeMasterCategory = removeMasterCategory;
 window.exportData = exportData;
 window.resetData = resetData;
+window.renderMovimenti = renderMovimenti;
 window.state = state;
 
 init();
