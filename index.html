@@ -946,7 +946,7 @@ select.form-control { cursor: pointer; }
 //  DATA LAYER — Firebase Firestore
 // ══════════════════════════════════════════════════════
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc }
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -1821,10 +1821,50 @@ document.getElementById('car_km_data').value = today();
 
 async function init() {
   showLoader('Connessione a Firebase…');
-  await loadAll();
+  try {
+    await loadAll();
+  } catch(err) {
+    hideLoader();
+    document.getElementById('loaderOverlay').style.display = 'flex';
+    document.getElementById('loaderMsg').textContent = '❌ Errore Firebase: ' + err.message;
+    return;
+  }
   hideLoader();
   renderGarage();
 }
+
+// ── Esponi tutte le funzioni a window (necessario con type="module") ──
+window.showView = showView;
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.installApp = installApp;
+window.selectCar = selectCar;
+window.editCar = editCar;
+window.deleteCar = deleteCar;
+window.saveCar = saveCar;
+window.openKmModal = openKmModal;
+window.saveKm = saveKm;
+window.openFuelModal = openFuelModal;
+window.saveFuel = saveFuel;
+window.openServiceModal = openServiceModal;
+window.saveService = saveService;
+window.openTyreModal = openTyreModal;
+window.saveTyre = saveTyre;
+window.openOtherModal = openOtherModal;
+window.saveOther = saveOther;
+window.showEventDetail = showEventDetail;
+window.deleteEvent = deleteEvent;
+window.togglePart = togglePart;
+window.removePart = removePart;
+window.toggleAllParts = toggleAllParts;
+window.addPartFlyOnTheFly = addPartFlyOnTheFly;
+window.addCustomPart = addCustomPart;
+window.removeMasterPart = removeMasterPart;
+window.addCustomCategory = addCustomCategory;
+window.removeMasterCategory = removeMasterCategory;
+window.exportData = exportData;
+window.resetData = resetData;
+window.state = state;
 
 init();
 </script>
