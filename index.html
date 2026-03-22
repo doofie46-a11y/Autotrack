@@ -375,8 +375,10 @@ select.form-control { cursor: pointer; }
 }
 .tag-fuel { background: rgba(59,130,246,.2); color: var(--blue); }
 .tag-service { background: rgba(240,165,0,.2); color: var(--gold); }
+.tag-blue { background: rgba(59,130,246,.2); color: var(--blue); }
 .tag-tyre { background: rgba(139,92,246,.2); color: var(--purple); }
 .tag-other { background: rgba(34,197,94,.15); color: var(--green); }
+.event-icon.service-str { background: rgba(59,130,246,.15); }
 
 /* ── EMPTY STATE ────────────────────────────────────── */
 .empty-state {
@@ -471,6 +473,8 @@ select.form-control { cursor: pointer; }
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.btn-sm.active-type { outline: 2px solid currentColor; opacity: 1; }
 
 .no-cars-hero {
   text-align: center; padding: 60px 24px;
@@ -754,10 +758,17 @@ select.form-control { cursor: pointer; }
 <div class="modal-overlay" id="modalService">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">🔧 Tagliando / Manutenzione</span>
+      <span class="modal-title" id="modalServiceTitle">🔧 Manutenzione</span>
       <button class="btn-icon" onclick="closeModal('modalService')">✕</button>
     </div>
     <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Tipo manutenzione *</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button id="btnOrdinaria" class="btn btn-sm gold btn-block active-type" onclick="setSottoTipo('ordinaria')" style="padding:12px">🔧 Ordinaria</button>
+          <button id="btnStraordinaria" class="btn btn-sm blue btn-block" onclick="setSottoTipo('straordinaria')" style="padding:12px">⚡ Straordinaria</button>
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Data *</label>
@@ -770,7 +781,7 @@ select.form-control { cursor: pointer; }
       </div>
       <div class="form-group">
         <label class="form-label">Tipo intervento</label>
-        <input class="form-control" id="svc_tipo" placeholder="Tagliando ordinario, Revisione...">
+        <input class="form-control" id="svc_tipo" placeholder="Tagliando ordinario, Sostituzione freni...">
       </div>
       <div class="form-group">
         <label class="form-label">Officina / Meccanico</label>
@@ -1312,9 +1323,10 @@ function renderMovimenti() {
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
       <button class="btn btn-sm accent btn-block" onclick="openFuelModal()">⛽ Rifornimento</button>
-      <button class="btn btn-sm gold btn-block" onclick="openServiceModal()">🔧 Tagliando</button>
+      <button class="btn btn-sm gold btn-block" onclick="openServiceModal('ordinaria')">🔧 Manutenzione ord.</button>
+      <button class="btn btn-sm blue btn-block" onclick="openServiceModal('straordinaria')">⚡ Manutenzione str.</button>
       <button class="btn btn-sm blue btn-block" onclick="openTyreModal()">🔄 Pneumatici</button>
-      <button class="btn btn-sm green btn-block" onclick="openOtherModal()">📝 Spesa generica</button>
+      <button class="btn btn-sm green btn-block" onclick="openOtherModal()" style="grid-column:span 2">📝 Spesa generica</button>
     </div>
   `;
 
@@ -1328,9 +1340,17 @@ function renderMovimenti() {
 }
 
 function eventItem(e) {
-  const icons = { fuel: '⛽', service: '🔧', tyre: '🔄', other: '📝', km: '📍' };
-  const tags = { fuel: 'tag-fuel', service: 'tag-service', tyre: 'tag-tyre', other: 'tag-other', km: '' };
-  const labels = { fuel: 'Rifornimento', service: 'Manutenzione', tyre: 'Pneumatici', other: 'Spesa', km: 'KM' };
+  const isStr = e.type === 'service' && e.sottoTipo === 'straordinaria';
+  const icons = { fuel: '⛽', tyre: '🔄', other: '📝', km: '📍' };
+  const tags =  { fuel: 'tag-fuel', tyre: 'tag-tyre', other: 'tag-other', km: '' };
+  const labels = { fuel: 'Rifornimento', tyre: 'Pneumatici', other: 'Spesa', km: 'KM' };
+
+  // service ha icona/tag/label dinamici
+  if (e.type === 'service') {
+    icons.service   = isStr ? '⚡' : '🔧';
+    tags.service    = isStr ? 'tag-blue' : 'tag-service';
+    labels.service  = isStr ? 'Man. Straord.' : 'Man. Ordinaria';
+  }
 
   let title = labels[e.type] || e.type;
   let meta = fmtDate(e.data);
@@ -1340,7 +1360,7 @@ function eventItem(e) {
     title = `Rifornimento ${e.litri ? e.litri + 'L' : ''}`;
     if (e.distributore) meta += ` · ${e.distributore}`;
   } else if (e.type === 'service') {
-    title = e.tipo || 'Tagliando';
+    title = e.tipo || (isStr ? 'Manutenzione straordinaria' : 'Manutenzione ordinaria');
     if (e.officina) meta += ` · ${e.officina}`;
   } else if (e.type === 'tyre') {
     title = `${e.marca_pneum || 'Pneumatici'} ${e.misura || ''}`;
@@ -1350,7 +1370,7 @@ function eventItem(e) {
   }
 
   return `<div class="event-item" onclick="showEventDetail('${e.id}')">
-    <div class="event-icon ${e.type}">
+    <div class="event-icon ${e.type}${isStr ? '-str' : ''}">
       <span>${icons[e.type] || '📌'}</span>
     </div>
     <div class="event-info">
@@ -1394,13 +1414,30 @@ async function saveFuel() {
   showToast('⛽ Rifornimento salvato!');
 }
 
-function openServiceModal() {
+function openServiceModal(sottoTipo = 'ordinaria') {
   document.getElementById('svc_data').value = today();
   ['svc_km','svc_tipo','svc_officina','svc_note'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('svc_prezzo').value = '';
   state.selectedParts = [];
+  state.currentSottoTipo = sottoTipo;
+  setSottoTipo(sottoTipo);
   renderPartsChips();
   openModal('modalService');
+}
+
+function setSottoTipo(tipo) {
+  state.currentSottoTipo = tipo;
+  const btnO = document.getElementById('btnOrdinaria');
+  const btnS = document.getElementById('btnStraordinaria');
+  if (tipo === 'ordinaria') {
+    btnO.classList.add('active-type');
+    btnS.classList.remove('active-type');
+    document.getElementById('modalServiceTitle').textContent = '🔧 Manutenzione Ordinaria';
+  } else {
+    btnS.classList.add('active-type');
+    btnO.classList.remove('active-type');
+    document.getElementById('modalServiceTitle').textContent = '⚡ Manutenzione Straordinaria';
+  }
 }
 
 function renderPartsChips() {
@@ -1453,6 +1490,7 @@ async function saveService() {
   showLoader('Salvataggio…');
   await dbAdd(EVENTS_COL, {
     carId: state.currentCarId, type: 'service',
+    sottoTipo: state.currentSottoTipo || 'ordinaria',
     data, km: parseInt(km), prezzo: parseFloat(prezzo),
     tipo: document.getElementById('svc_tipo').value,
     officina: document.getElementById('svc_officina').value,
@@ -1465,7 +1503,7 @@ async function saveService() {
   closeModal('modalService');
   state.selectedParts = [];
   renderMovimenti();
-  showToast('🔧 Manutenzione salvata!');
+  showToast(state.currentSottoTipo === 'straordinaria' ? '⚡ Manutenzione straordinaria salvata!' : '🔧 Manutenzione ordinaria salvata!');
 }
 
 function openTyreModal() {
@@ -1551,7 +1589,10 @@ function showEventDetail(id) {
     if (e.distributore) html += `<div class="summary-row"><span class="label">Distributore</span><span class="value">${e.distributore}</span></div>`;
     html += `<div class="summary-row"><span class="label">Pieno completo</span><span class="value">${e.pieno ? 'Sì' : 'No'}</span></div>`;
   } else if (e.type === 'service') {
-    if (e.tipo) html += `<div class="summary-row"><span class="label">Tipo</span><span class="value">${e.tipo}</span></div>`;
+    const isStr = e.sottoTipo === 'straordinaria';
+    html += `<div class="summary-row"><span class="label">Tipo manutenzione</span>
+      <span class="value">${isStr ? '⚡ Straordinaria' : '🔧 Ordinaria'}</span></div>`;
+    if (e.tipo) html += `<div class="summary-row"><span class="label">Intervento</span><span class="value">${e.tipo}</span></div>`;
     if (e.officina) html += `<div class="summary-row"><span class="label">Officina</span><span class="value">${e.officina}</span></div>`;
     if (e.pezzi && e.pezzi.length) {
       html += `<div class="summary-row"><span class="label">Pezzi sostituiti</span><span class="value"></span></div>`;
@@ -1600,11 +1641,15 @@ function renderDashboard() {
     const evs = carEvents(car.id).filter(e => e.type !== 'km');
     const fuels = evs.filter(e => e.type === 'fuel');
     const services = evs.filter(e => e.type === 'service');
+    const servicesOrd = services.filter(e => e.sottoTipo !== 'straordinaria');
+    const servicesStr = services.filter(e => e.sottoTipo === 'straordinaria');
     const tyres = evs.filter(e => e.type === 'tyre');
     const others = evs.filter(e => e.type === 'other');
     const totSpesa = evs.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
     const totFuel = fuels.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
     const totService = services.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
+    const totServiceOrd = servicesOrd.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
+    const totServiceStr = servicesStr.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
     const totTyre = tyres.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
     const totOther = others.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
     const lastKm = carLastKm(car.id);
@@ -1660,10 +1705,15 @@ function renderDashboard() {
           <div class="stat-unit">€ · ${fuels.length} rifornimenti</div>
         </div>
         <div class="stat-card gold-border">
-          <div class="stat-label">Manutenzioni</div>
-          <div class="stat-value text-gold">${totService.toFixed(0)}</div>
-          <div class="stat-unit">€ · ${services.length} interventi</div>
+          <div class="stat-label">Man. Ordinaria</div>
+          <div class="stat-value text-gold">${totServiceOrd.toFixed(0)}</div>
+          <div class="stat-unit">€ · ${servicesOrd.length} interventi</div>
         </div>
+        ${servicesStr.length > 0 ? `<div class="stat-card" style="border-color:var(--blue);grid-column:span 2">
+          <div class="stat-label">Man. Straordinaria</div>
+          <div class="stat-value text-blue">${totServiceStr.toFixed(0)}</div>
+          <div class="stat-unit">€ · ${servicesStr.length} interventi</div>
+        </div>` : ''}
       </div>
 
       ${totSpesa > 0 ? `
@@ -1671,8 +1721,10 @@ function renderDashboard() {
         <div class="text-sm text-muted" style="margin-bottom:6px">Distribuzione spese</div>
         ${totFuel > 0 ? `<div class="flex-between text-sm" style="margin-bottom:4px"><span>⛽ Carburante</span><span class="text-blue">${fmtEuro(totFuel)}</span></div>
         <div class="progress-bar" style="margin-bottom:8px"><div class="progress-fill" style="width:${totFuel/totSpesa*100}%;background:var(--blue)"></div></div>` : ''}
-        ${totService > 0 ? `<div class="flex-between text-sm" style="margin-bottom:4px"><span>🔧 Manutenzioni</span><span class="text-gold">${fmtEuro(totService)}</span></div>
-        <div class="progress-bar" style="margin-bottom:8px"><div class="progress-fill" style="width:${totService/totSpesa*100}%;background:var(--gold)"></div></div>` : ''}
+        ${totServiceOrd > 0 ? `<div class="flex-between text-sm" style="margin-bottom:4px"><span>🔧 Man. Ordinaria</span><span class="text-gold">${fmtEuro(totServiceOrd)}</span></div>
+        <div class="progress-bar" style="margin-bottom:8px"><div class="progress-fill" style="width:${totServiceOrd/totSpesa*100}%;background:var(--gold)"></div></div>` : ''}
+        ${totServiceStr > 0 ? `<div class="flex-between text-sm" style="margin-bottom:4px"><span>⚡ Man. Straordinaria</span><span class="text-blue">${fmtEuro(totServiceStr)}</span></div>
+        <div class="progress-bar" style="margin-bottom:8px"><div class="progress-fill" style="width:${totServiceStr/totSpesa*100}%;background:var(--blue)"></div></div>` : ''}
         ${totTyre > 0 ? `<div class="flex-between text-sm" style="margin-bottom:4px"><span>🔄 Pneumatici</span><span style="color:var(--purple)">${fmtEuro(totTyre)}</span></div>
         <div class="progress-bar" style="margin-bottom:8px"><div class="progress-fill" style="width:${totTyre/totSpesa*100}%;background:var(--purple)"></div></div>` : ''}
         ${totOther > 0 ? `<div class="flex-between text-sm" style="margin-bottom:4px"><span>📝 Altro</span><span class="text-green">${fmtEuro(totOther)}</span></div>
@@ -1848,6 +1900,7 @@ window.saveKm = saveKm;
 window.openFuelModal = openFuelModal;
 window.saveFuel = saveFuel;
 window.openServiceModal = openServiceModal;
+window.setSottoTipo = setSottoTipo;
 window.saveService = saveService;
 window.openTyreModal = openTyreModal;
 window.saveTyre = saveTyre;
