@@ -1,4 +1,4 @@
-const CACHE = 'autotrack-v6';
+const CACHE = 'autotrack-v7';
 const ASSETS = [
   '/Autotrack/',
   '/Autotrack/index.html',

@@ -476,6 +476,20 @@ select.form-control { cursor: pointer; }
 
 .btn-sm.active-type { outline: 2px solid currentColor; opacity: 1; }
 
+.event-item { user-select: none; -webkit-user-select: none; }
+.event-item.pressing { opacity: 0.7; transform: scale(0.98); transition: all .1s; }
+.car-card { user-select: none; -webkit-user-select: none; }
+.car-card.pressing { opacity: 0.75; transform: scale(0.99) translateY(-1px); }
+
+.scad-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.68rem; padding: 3px 8px; border-radius: 20px;
+  font-weight: 600; margin-top: 4px; cursor: pointer;
+}
+.scad-ok    { background: rgba(34,197,94,.15);  color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+.scad-warn  { background: rgba(240,165,0,.15);  color: var(--gold);  border: 1px solid rgba(240,165,0,.3); }
+.scad-late  { background: rgba(220,38,38,.15);  color: #f87171;      border: 1px solid rgba(220,38,38,.3); }
+
 .no-cars-hero {
   text-align: center; padding: 60px 24px;
 }
@@ -657,6 +671,31 @@ select.form-control { cursor: pointer; }
         <div class="form-group">
           <label class="form-label">Data rilevazione</label>
           <input class="form-control" type="date" id="car_km_data">
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">📋 Ultimo bollo pagato</label>
+          <input class="form-control" type="date" id="car_bollo">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo bollo €</label>
+          <input class="form-control" type="number" step="0.01" id="car_bollo_importo" placeholder="150.00">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">🔍 Ultima revisione</label>
+          <input class="form-control" type="date" id="car_revisione">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prima immatric.?</label>
+          <select class="form-control" id="car_prima_immatric">
+            <option value="">Non so</option>
+            <option value="si">Sì (auto nuova)</option>
+            <option value="no">No (già usata)</option>
+          </select>
         </div>
       </div>
     </div>
@@ -937,6 +976,7 @@ select.form-control { cursor: pointer; }
     <div class="modal-body" id="detailBody"></div>
     <div class="modal-footer">
       <button class="btn btn-sm danger btn-block" id="detailDeleteBtn">🗑 Elimina</button>
+      <button class="btn btn-sm accent btn-block" id="detailEditBtn">✏️ Modifica</button>
       <button class="btn btn-sm btn-block" onclick="closeModal('modalDetail')">Chiudi</button>
     </div>
   </div>
@@ -1044,6 +1084,8 @@ let state = {
   currentCarId: null,
   selectedParts: [],
   editingCarId: null,
+  editingEventId: null,
+  currentSottoTipo: 'ordinaria',
 };
 
 async function loadAll() {
@@ -1118,6 +1160,21 @@ function carLastKm(carId) {
 // ══════════════════════════════════════════════════════
 //  GARAGE
 // ══════════════════════════════════════════════════════
+function scadenzaInfo(dataStr, intervalloAnni) {
+  if (!dataStr) return null;
+  const ultima = new Date(dataStr + 'T00:00:00');
+  const prossima = new Date(ultima);
+  prossima.setFullYear(prossima.getFullYear() + intervalloAnni);
+  const oggi = new Date(); oggi.setHours(0,0,0,0);
+  const diffMs = prossima - oggi;
+  const diffGiorni = Math.round(diffMs / 86400000);
+  const label = prossima.toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'numeric' });
+  let cls = 'scad-ok';
+  if (diffGiorni < 0) cls = 'scad-late';
+  else if (diffGiorni <= 60) cls = 'scad-warn';
+  return { label, diffGiorni, cls, prossima };
+}
+
 function renderGarage() {
   const el = document.getElementById('carsList');
   if (state.cars.length === 0) {
@@ -1134,7 +1191,23 @@ function renderGarage() {
     const evs = carEvents(car.id);
     const totSpesa = evs.reduce((s, e) => s + (parseFloat(e.prezzo) || 0), 0);
     const isSel = car.id === state.currentCarId;
-    return `<div class="car-card ${isSel ? 'selected' : ''}" onclick="selectCar('${car.id}')">
+
+    // Bollo: annuale
+    const bolloInfo = scadenzaInfo(car.bollo, 1);
+    // Revisione: biennale (se prima immatricolazione, 4 anni la prima volta — ma gestiamo sempre dal campo ultima revisione → 2 anni)
+    const revInfo = scadenzaInfo(car.revisione, 2);
+
+    const bolloBadge = bolloInfo ? `<span class="scad-badge ${bolloInfo.cls}" onclick="event.stopPropagation();addToCalendar('bollo','${car.id}')">
+      📋 Bollo: ${bolloInfo.diffGiorni < 0 ? 'Scaduto!' : bolloInfo.diffGiorni === 0 ? 'Oggi!' : 'entro ' + bolloInfo.label}
+    </span>` : '';
+    const revBadge = revInfo ? `<span class="scad-badge ${revInfo.cls}" onclick="event.stopPropagation();addToCalendar('revisione','${car.id}')">
+      🔍 Revisione: ${revInfo.diffGiorni < 0 ? 'Scaduta!' : revInfo.diffGiorni === 0 ? 'Oggi!' : 'entro ' + revInfo.label}
+    </span>` : '';
+
+    return `<div class="car-card ${isSel ? 'selected' : ''}"
+      onclick="selectCar('${car.id}')"
+      oncontextmenu="event.preventDefault();editCar('${car.id}')"
+      data-longpress-id="${car.id}" data-longpress-type="car">
       <div class="flex-between">
         <div class="car-card-name">${car.marca} ${car.modello}</div>
         ${isSel ? '<span class="car-badge gold">✓ Attiva</span>' : ''}
@@ -1145,6 +1218,7 @@ function renderGarage() {
         ${car.carburante ? '<span>⛽ ' + car.carburante + '</span>' : ''}
       </div>
       <div class="car-card-km">📍 ${fmtKm(km)}</div>
+      ${bolloBadge || revBadge ? `<div class="d-flex mt-12" style="gap:6px;flex-wrap:wrap">${bolloBadge}${revBadge}</div>` : ''}
       <div class="d-flex mt-12" style="justify-content:space-between;align-items:center">
         <span class="text-sm text-muted">${evs.length} eventi · ${fmtEuro(totSpesa)}</span>
       </div>
@@ -1161,6 +1235,7 @@ function renderGarage() {
     document.getElementById('topCarName').textContent = cur.marca + ' ' + cur.modello;
     document.getElementById('currentCarBadge').style.display = 'block';
   }
+  attachLongPress();
 }
 
 function selectCar(id) {
@@ -1217,6 +1292,10 @@ function editCar(id) {
   document.getElementById('car_note').value = car.note || '';
   document.getElementById('car_km').value = car.km || '';
   document.getElementById('car_km_data').value = car.km_data || today();
+  document.getElementById('car_bollo').value = car.bollo || '';
+  document.getElementById('car_bollo_importo').value = car.bollo_importo || '';
+  document.getElementById('car_revisione').value = car.revisione || '';
+  document.getElementById('car_prima_immatric').value = car.prima_immatric || '';
   openModal('modalCar');
 }
 
@@ -1233,6 +1312,10 @@ async function saveCar() {
     note: document.getElementById('car_note').value,
     km: document.getElementById('car_km').value,
     km_data: document.getElementById('car_km_data').value || today(),
+    bollo: document.getElementById('car_bollo').value || null,
+    bollo_importo: document.getElementById('car_bollo_importo').value || null,
+    revisione: document.getElementById('car_revisione').value || null,
+    prima_immatric: document.getElementById('car_prima_immatric').value || null,
   };
   showLoader('Salvataggio…');
   if (state.editingCarId) {
@@ -1252,10 +1335,12 @@ async function saveCar() {
 }
 
 function resetCarForm() {
-  ['car_marca','car_modello','car_anno','car_targa','car_cc','car_note','car_km'].forEach(id => {
+  ['car_marca','car_modello','car_anno','car_targa','car_cc','car_note','car_km',
+   'car_bollo','car_bollo_importo','car_revisione'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('car_km_data').value = today();
+  document.getElementById('car_prima_immatric').value = '';
   document.getElementById('modalCarTitle').textContent = 'Nuova Vettura';
   state.editingCarId = null;
 }
@@ -1369,7 +1454,9 @@ function eventItem(e) {
     title = e.descrizione || e.categoria || 'Spesa';
   }
 
-  return `<div class="event-item" onclick="showEventDetail('${e.id}')">
+  return `<div class="event-item" onclick="showEventDetail('${e.id}')"
+    oncontextmenu="event.preventDefault();editEvent('${e.id}')"
+    data-longpress-id="${e.id}" data-longpress-type="event">
     <div class="event-icon ${e.type}${isStr ? '-str' : ''}">
       <span>${icons[e.type] || '📌'}</span>
     </div>
@@ -1396,8 +1483,7 @@ async function saveFuel() {
   const litri = document.getElementById('fuel_litri').value;
   const totale = document.getElementById('fuel_totale').value;
   if (!data || !km || !litri || !totale) { showToast('⚠️ Campi obbligatori mancanti'); return; }
-  showLoader('Salvataggio…');
-  await dbAdd(EVENTS_COL, {
+  await saveOrUpdateEvent('fuel', {
     carId: state.currentCarId, type: 'fuel',
     data, km: parseInt(km), litri: parseFloat(litri),
     prezzo_litro: parseFloat(document.getElementById('fuel_prezzo_litro').value) || null,
@@ -1407,8 +1493,6 @@ async function saveFuel() {
     note: document.getElementById('fuel_note').value,
     created: Date.now()
   });
-  state.events = await dbGetAll(EVENTS_COL);
-  hideLoader();
   closeModal('modalFuel');
   renderMovimenti();
   showToast('⛽ Rifornimento salvato!');
@@ -1487,8 +1571,7 @@ async function saveService() {
   const km = document.getElementById('svc_km').value;
   const prezzo = document.getElementById('svc_prezzo').value;
   if (!data || !km || !prezzo) { showToast('⚠️ Data, KM e prezzo obbligatori'); return; }
-  showLoader('Salvataggio…');
-  await dbAdd(EVENTS_COL, {
+  await saveOrUpdateEvent('service', {
     carId: state.currentCarId, type: 'service',
     sottoTipo: state.currentSottoTipo || 'ordinaria',
     data, km: parseInt(km), prezzo: parseFloat(prezzo),
@@ -1498,8 +1581,6 @@ async function saveService() {
     note: document.getElementById('svc_note').value,
     created: Date.now()
   });
-  state.events = await dbGetAll(EVENTS_COL);
-  hideLoader();
   closeModal('modalService');
   state.selectedParts = [];
   renderMovimenti();
@@ -1519,23 +1600,19 @@ function openTyreModal() {
 async function saveTyre() {
   const data = document.getElementById('tyre_data').value;
   const km = document.getElementById('tyre_km').value;
-  const marca_pneum = document.getElementById('tyre_marca').value;
-  const misura = document.getElementById('tyre_misura').value;
   const prezzo = document.getElementById('tyre_prezzo').value;
   if (!data || !km || !prezzo) { showToast('⚠️ Campi obbligatori mancanti'); return; }
-  showLoader('Salvataggio…');
-  await dbAdd(EVENTS_COL, {
+  await saveOrUpdateEvent('tyre', {
     carId: state.currentCarId, type: 'tyre',
     data, km: parseInt(km), prezzo: parseFloat(prezzo),
-    marca_pneum, misura,
+    marca_pneum: document.getElementById('tyre_marca').value,
+    misura: document.getElementById('tyre_misura').value,
     stagione: document.getElementById('tyre_stagione').value,
     qty: document.getElementById('tyre_qty').value,
     officina: document.getElementById('tyre_officina').value,
     note: document.getElementById('tyre_note').value,
     created: Date.now()
   });
-  state.events = await dbGetAll(EVENTS_COL);
-  hideLoader();
   closeModal('modalTyre');
   renderMovimenti();
   showToast('🔄 Cambio pneumatici salvato!');
@@ -1555,8 +1632,7 @@ async function saveOther() {
   const prezzo = document.getElementById('oth_prezzo').value;
   const descrizione = document.getElementById('oth_desc').value;
   if (!data || !prezzo || !descrizione) { showToast('⚠️ Data, descrizione e prezzo obbligatori'); return; }
-  showLoader('Salvataggio…');
-  await dbAdd(EVENTS_COL, {
+  await saveOrUpdateEvent('other', {
     carId: state.currentCarId, type: 'other',
     data, km: parseInt(document.getElementById('oth_km').value) || null,
     prezzo: parseFloat(prezzo),
@@ -1565,8 +1641,6 @@ async function saveOther() {
     note: document.getElementById('oth_note').value,
     created: Date.now()
   });
-  state.events = await dbGetAll(EVENTS_COL);
-  hideLoader();
   closeModal('modalOther');
   renderMovimenti();
   showToast('📝 Spesa salvata!');
@@ -1611,6 +1685,7 @@ function showEventDetail(id) {
   if (e.note) html += `<div class="summary-row"><span class="label">Note</span><span class="value" style="max-width:60%;text-align:right;font-size:0.8rem">${e.note}</span></div>`;
   document.getElementById('detailBody').innerHTML = html;
   document.getElementById('detailDeleteBtn').onclick = () => deleteEvent(e.id);
+  document.getElementById('detailEditBtn').onclick = () => editEvent(e.id);
   openModal('modalDetail');
 }
 
@@ -1826,6 +1901,190 @@ async function resetData() {
 }
 
 // ══════════════════════════════════════════════════════
+//  EDIT EVENT — riapre il modal già compilato
+// ══════════════════════════════════════════════════════
+function editEvent(id) {
+  const e = state.events.find(ev => ev.id === id);
+  if (!e) return;
+  state.editingEventId = id;
+  closeModal('modalDetail');
+  if (e.type === 'fuel') {
+    document.getElementById('fuel_data').value = e.data || '';
+    document.getElementById('fuel_km').value = e.km || '';
+    document.getElementById('fuel_litri').value = e.litri || '';
+    document.getElementById('fuel_prezzo_litro').value = e.prezzo_litro || '';
+    document.getElementById('fuel_totale').value = e.prezzo || '';
+    document.getElementById('fuel_pieno').value = e.pieno ? '1' : '0';
+    document.getElementById('fuel_distributore').value = e.distributore || '';
+    document.getElementById('fuel_note').value = e.note || '';
+    openModal('modalFuel');
+  } else if (e.type === 'service') {
+    document.getElementById('svc_data').value = e.data || '';
+    document.getElementById('svc_km').value = e.km || '';
+    document.getElementById('svc_tipo').value = e.tipo || '';
+    document.getElementById('svc_officina').value = e.officina || '';
+    document.getElementById('svc_prezzo').value = e.prezzo || '';
+    document.getElementById('svc_note').value = e.note || '';
+    state.selectedParts = [...(e.pezzi || [])];
+    state.currentSottoTipo = e.sottoTipo || 'ordinaria';
+    setSottoTipo(state.currentSottoTipo);
+    renderPartsChips();
+    openModal('modalService');
+  } else if (e.type === 'tyre') {
+    document.getElementById('tyre_data').value = e.data || '';
+    document.getElementById('tyre_km').value = e.km || '';
+    document.getElementById('tyre_marca').value = e.marca_pneum || '';
+    document.getElementById('tyre_misura').value = e.misura || '';
+    document.getElementById('tyre_stagione').value = e.stagione || 'Estivi';
+    document.getElementById('tyre_qty').value = e.qty || '4';
+    document.getElementById('tyre_prezzo').value = e.prezzo || '';
+    document.getElementById('tyre_officina').value = e.officina || '';
+    document.getElementById('tyre_note').value = e.note || '';
+    openModal('modalTyre');
+  } else if (e.type === 'other') {
+    document.getElementById('oth_data').value = e.data || '';
+    document.getElementById('oth_km').value = e.km || '';
+    document.getElementById('oth_prezzo').value = e.prezzo || '';
+    document.getElementById('oth_desc').value = e.descrizione || '';
+    document.getElementById('oth_note').value = e.note || '';
+    const sel = document.getElementById('oth_categoria');
+    sel.innerHTML = state.categories.map(c => `<option ${c === e.categoria ? 'selected' : ''}>${c}</option>`).join('');
+    openModal('modalOther');
+  }
+}
+
+// Quando si salva un evento in modifica, sovrascrive invece di aggiungere
+async function saveOrUpdateEvent(type, data) {
+  showLoader('Salvataggio…');
+  if (state.editingEventId) {
+    await dbPut(EVENTS_COL, { ...data, id: state.editingEventId });
+    state.editingEventId = null;
+  } else {
+    await dbAdd(EVENTS_COL, data);
+  }
+  state.events = await dbGetAll(EVENTS_COL);
+  hideLoader();
+}
+
+// ══════════════════════════════════════════════════════
+//  CALENDARIO — bollo e revisione
+// ══════════════════════════════════════════════════════
+function addToCalendar(tipo, carId) {
+  const car = state.cars.find(c => c.id === carId);
+  if (!car) return;
+  const isBollo = tipo === 'bollo';
+  const dataUltima = isBollo ? car.bollo : car.revisione;
+  if (!dataUltima) { showToast('⚠️ Inserisci prima la data ' + (isBollo ? 'ultimo bollo' : 'ultima revisione')); return; }
+  const anni = 1; // bollo annuale, revisione biennale
+  const intervalloAnni = isBollo ? 1 : 2;
+  const ultima = new Date(dataUltima + 'T00:00:00');
+  const prossima = new Date(ultima);
+  prossima.setFullYear(prossima.getFullYear() + intervalloAnni);
+  const nome = `${car.marca} ${car.modello}${car.targa ? ' (' + car.targa + ')' : ''}`;
+  const titolo = isBollo ? `📋 Bollo auto — ${nome}` : `🔍 Revisione auto — ${nome}`;
+  const desc = isBollo
+    ? `Scadenza bollo annuale per ${nome}.${car.bollo_importo ? ' Importo anno scorso: €' + car.bollo_importo : ''}`
+    : `Scadenza revisione biennale per ${nome}.`;
+
+  // Formato data per Google Calendar: YYYYMMDD
+  const fmt = d => d.toISOString().split('T')[0].replace(/-/g,'');
+  const dataFine = new Date(prossima); dataFine.setDate(dataFine.getDate() + 1);
+  const gcUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE`
+    + `&text=${encodeURIComponent(titolo)}`
+    + `&dates=${fmt(prossima)}/${fmt(dataFine)}`
+    + `&details=${encodeURIComponent(desc)}`;
+
+  // Mostra modal scelta
+  showCalendarModal(titolo, gcUrl, prossima, desc);
+}
+
+function showCalendarModal(titolo, gcUrl, data, desc) {
+  const existing = document.getElementById('modalCalendar');
+  if (existing) existing.remove();
+  const d = data.toLocaleDateString('it-IT', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+  const modal = document.createElement('div');
+  modal.id = 'modalCalendar';
+  modal.className = 'modal-overlay open';
+  modal.innerHTML = `<div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📅 Aggiungi al Calendario</span>
+      <button class="btn-icon" onclick="document.getElementById('modalCalendar').remove()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-weight:600;margin-bottom:8px">${titolo}</p>
+      <p class="text-sm text-muted" style="margin-bottom:16px">Scadenza: <strong>${d}</strong></p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <a href="${gcUrl}" target="_blank" class="btn btn-primary btn-block" style="text-decoration:none;text-align:center"
+          onclick="document.getElementById('modalCalendar').remove()">
+          📅 Apri Google Calendar
+        </a>
+        <button class="btn btn-sm green btn-block" onclick="downloadIcs('${encodeURIComponent(titolo)}','${data.toISOString().split('T')[0]}','${encodeURIComponent(desc)}')">
+          📥 Scarica file .ics (Calendario nativo)
+        </button>
+      </div>
+      <p class="text-sm text-muted" style="margin-top:12px;line-height:1.5">
+        Il file .ics può essere aperto direttamente dall'app Calendario di Android o iOS.
+      </p>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', ev => { if (ev.target === modal) modal.remove(); });
+}
+
+function downloadIcs(titoloEnc, dataStr, descEnc) {
+  const titolo = decodeURIComponent(titoloEnc);
+  const desc = decodeURIComponent(descEnc);
+  const dt = dataStr.replace(/-/g,'');
+  const dtEnd = (() => { const d = new Date(dataStr+'T00:00:00'); d.setDate(d.getDate()+1); return d.toISOString().split('T')[0].replace(/-/g,''); })();
+  const uid = Date.now() + '@autotrack';
+  const ics = [
+    'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AutoTrack//IT',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTART;VALUE=DATE:${dt}`,
+    `DTEND;VALUE=DATE:${dtEnd}`,
+    `SUMMARY:${titolo}`,
+    `DESCRIPTION:${desc.replace(/,/g,'\\,')}`,
+    'BEGIN:VALARM','TRIGGER:-P7D','ACTION:DISPLAY',`DESCRIPTION:Promemoria: ${titolo}`,'END:VALARM',
+    'END:VEVENT','END:VCALENDAR'
+  ].join('\r\n');
+  const blob = new Blob([ics], { type: 'text/calendar' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'promemoria.ics';
+  a.click();
+  document.getElementById('modalCalendar')?.remove();
+}
+
+// ══════════════════════════════════════════════════════
+//  LONG PRESS — 600ms
+// ══════════════════════════════════════════════════════
+function attachLongPress() {
+  let timer = null;
+  let target = null;
+  document.querySelectorAll('[data-longpress-id]').forEach(el => {
+    el.addEventListener('touchstart', e => {
+      target = el;
+      el.classList.add('pressing');
+      timer = setTimeout(() => {
+        el.classList.remove('pressing');
+        const id = el.dataset.longpressId;
+        const type = el.dataset.longpressType;
+        if (type === 'car') editCar(id);
+        else if (type === 'event') editEvent(id);
+        timer = null;
+      }, 600);
+    }, { passive: true });
+    const cancel = () => {
+      clearTimeout(timer); timer = null;
+      el.classList.remove('pressing');
+    };
+    el.addEventListener('touchend', cancel, { passive: true });
+    el.addEventListener('touchmove', cancel, { passive: true });
+  });
+}
+
+// ══════════════════════════════════════════════════════
 //  PWA INSTALL
 // ══════════════════════════════════════════════════════
 let deferredPrompt = null;
@@ -1919,6 +2178,10 @@ window.removeMasterCategory = removeMasterCategory;
 window.exportData = exportData;
 window.resetData = resetData;
 window.renderMovimenti = renderMovimenti;
+window.editEvent = editEvent;
+window.addToCalendar = addToCalendar;
+window.downloadIcs = downloadIcs;
+window.scadenzaInfo = scadenzaInfo;
 window.state = state;
 
 init();
