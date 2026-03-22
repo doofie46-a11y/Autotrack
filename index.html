@@ -1197,10 +1197,16 @@ function renderGarage() {
     // Revisione: biennale (se prima immatricolazione, 4 anni la prima volta — ma gestiamo sempre dal campo ultima revisione → 2 anni)
     const revInfo = scadenzaInfo(car.revisione, 2);
 
-    const bolloBadge = bolloInfo ? `<span class="scad-badge ${bolloInfo.cls}" onclick="event.stopPropagation();addToCalendar('bollo','${car.id}')">
+    const bolloBadge = bolloInfo ? `<span class="scad-badge ${bolloInfo.cls}"
+      onclick="event.stopPropagation();addToCalendar('bollo','${car.id}')"
+      ontouchstart="event.stopPropagation()"
+      ontouchend="event.stopPropagation()">
       📋 Bollo: ${bolloInfo.diffGiorni < 0 ? 'Scaduto!' : bolloInfo.diffGiorni === 0 ? 'Oggi!' : 'entro ' + bolloInfo.label}
     </span>` : '';
-    const revBadge = revInfo ? `<span class="scad-badge ${revInfo.cls}" onclick="event.stopPropagation();addToCalendar('revisione','${car.id}')">
+    const revBadge = revInfo ? `<span class="scad-badge ${revInfo.cls}"
+      onclick="event.stopPropagation();addToCalendar('revisione','${car.id}')"
+      ontouchstart="event.stopPropagation()"
+      ontouchend="event.stopPropagation()">
       🔍 Revisione: ${revInfo.diffGiorni < 0 ? 'Scaduta!' : revInfo.diffGiorni === 0 ? 'Oggi!' : 'entro ' + revInfo.label}
     </span>` : '';
 
@@ -1223,9 +1229,9 @@ function renderGarage() {
         <span class="text-sm text-muted">${evs.length} eventi · ${fmtEuro(totSpesa)}</span>
       </div>
       <div class="car-card-actions">
-        <button class="btn btn-sm" onclick="event.stopPropagation();editCar('${car.id}')">✏️ Modifica</button>
-        <button class="btn btn-sm blue" onclick="event.stopPropagation();openKmModal('${car.id}')">📍 KM</button>
-        <button class="btn btn-sm danger" onclick="event.stopPropagation();deleteCar('${car.id}')">🗑</button>
+        <button class="btn btn-sm" onclick="event.stopPropagation();editCar('${car.id}')" ontouchstart="event.stopPropagation()">✏️ Modifica</button>
+        <button class="btn btn-sm blue" onclick="event.stopPropagation();openKmModal('${car.id}')" ontouchstart="event.stopPropagation()">📍 KM</button>
+        <button class="btn btn-sm danger" onclick="event.stopPropagation();deleteCar('${car.id}')" ontouchstart="event.stopPropagation()">🗑</button>
       </div>
     </div>`;
   }).join('');
