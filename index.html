@@ -1389,7 +1389,11 @@ function renderMovimenti() {
 
   const evs = carEvents(car.id)
     .filter(e => e.type !== 'km')
-    .sort((a, b) => b.data.localeCompare(a.data));
+    .sort((a, b) => {
+      // ordine per data intervento decrescente, a parità per data inserimento
+      const cmp = (b.data || '').localeCompare(a.data || '');
+      return cmp !== 0 ? cmp : (b.created || 0) - (a.created || 0);
+    });
 
   let html = `
     <div class="section-title">📋 ${car.marca} ${car.modello}</div>
@@ -1469,6 +1473,7 @@ function eventItem(e) {
 }
 
 function openFuelModal() {
+  state.editingEventId = null;
   document.getElementById('fuel_data').value = today();
   ['fuel_km','fuel_litri','fuel_prezzo_litro','fuel_totale','fuel_distributore','fuel_note'].forEach(id => {
     document.getElementById(id).value = '';
@@ -1499,6 +1504,7 @@ async function saveFuel() {
 }
 
 function openServiceModal(sottoTipo = 'ordinaria') {
+  state.editingEventId = null;
   document.getElementById('svc_data').value = today();
   ['svc_km','svc_tipo','svc_officina','svc_note'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('svc_prezzo').value = '';
@@ -1588,6 +1594,7 @@ async function saveService() {
 }
 
 function openTyreModal() {
+  state.editingEventId = null;
   document.getElementById('tyre_data').value = today();
   ['tyre_km','tyre_marca','tyre_misura','tyre_officina','tyre_note','tyre_prezzo'].forEach(id =>
     document.getElementById(id).value = ''
@@ -1619,6 +1626,7 @@ async function saveTyre() {
 }
 
 function openOtherModal() {
+  state.editingEventId = null;
   document.getElementById('oth_data').value = today();
   ['oth_km','oth_desc','oth_note'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('oth_prezzo').value = '';
