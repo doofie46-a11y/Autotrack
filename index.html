@@ -476,6 +476,48 @@ select.form-control { cursor: pointer; }
 
 .btn-sm.active-type { outline: 2px solid currentColor; opacity: 1; }
 
+/* ── LOGIN SCREEN ───────────────────────────────────── */
+#loginScreen {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 32px;
+}
+#loginScreen.hidden { display: none; }
+
+.login-google-btn {
+  display: flex; align-items: center; gap: 12px;
+  background: white; color: #1f2937;
+  border: none; border-radius: 12px;
+  padding: 14px 28px; font-size: 1rem; font-weight: 600;
+  cursor: pointer; box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+  transition: transform .15s, box-shadow .15s;
+  font-family: var(--font-body);
+}
+.login-google-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(0,0,0,0.45); }
+.login-google-btn:active { transform: translateY(0); }
+
+.user-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  object-fit: cover; border: 2px solid var(--border);
+  flex-shrink: 0;
+}
+.user-avatar-placeholder {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--accent); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; font-weight: 700;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+}
+
+.shared-badge {
+  font-size: 0.62rem; padding: 2px 7px; border-radius: 20px;
+  background: rgba(59,130,246,.15); color: var(--blue);
+  border: 1px solid rgba(59,130,246,.3); font-weight: 600;
+}
+
 .event-item { user-select: none; -webkit-user-select: none; }
 .event-item.pressing { opacity: 0.7; transform: scale(0.98); transition: all .1s; }
 .car-card { user-select: none; -webkit-user-select: none; }
@@ -520,7 +562,7 @@ select.form-control { cursor: pointer; }
 </style>
 </head>
 <body>
-<div id="app">
+<div id="app" style="display:none">
   <div class="topbar">
     <div>
       <div class="topbar-logo">AutoTrack</div>
@@ -563,6 +605,8 @@ select.form-control { cursor: pointer; }
     <!-- IMPOSTAZIONI VIEW -->
     <div class="view" id="view-settings">
       <div class="section-title">⚙️ Impostazioni</div>
+
+      <div id="settingsUserSection"></div>
 
       <div class="card">
         <div class="card-header"><span style="font-weight:600">Pezzi Ricambio Predefiniti</span></div>
@@ -609,6 +653,18 @@ select.form-control { cursor: pointer; }
       <span class="nav-icon">⚙️</span>Impostazioni
     </button>
   </nav>
+</div>
+
+<!-- Login Screen -->
+<div id="loginScreen">
+  <span style="font-size:4.5rem;margin-bottom:16px;display:block;text-align:center;animation:float 3s ease-in-out infinite">🚗</span>
+  <div style="font-family:var(--font-head);font-size:2.8rem;letter-spacing:3px;color:var(--accent);margin-bottom:6px;text-align:center">AutoTrack</div>
+  <div style="color:var(--text2);font-size:0.85rem;margin-bottom:48px;text-align:center;letter-spacing:0.5px">Gestione spese e manutenzione auto</div>
+  <button class="login-google-btn" onclick="signInGoogle()">
+    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+    Accedi con Google
+  </button>
+  <div id="loginError" style="color:#f87171;font-size:0.82rem;margin-top:20px;text-align:center;max-width:280px;line-height:1.4"></div>
 </div>
 
 <!-- ══════════════════════ MODALS ══════════════════════ -->
@@ -982,6 +1038,31 @@ select.form-control { cursor: pointer; }
   </div>
 </div>
 
+<!-- Modal: Condividi Vettura -->
+<div class="modal-overlay" id="modalShare">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">👥 Condividi Vettura</span>
+      <button class="btn-icon" onclick="closeModal('modalShare')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="shareCarName" style="font-weight:700;font-size:1rem;margin-bottom:12px;color:var(--text)"></div>
+      <p class="text-sm text-muted" style="margin-bottom:16px;line-height:1.5">
+        Inserisci l'email dell'utente con cui condividere. Deve aver già aperto l'app almeno una volta.
+      </p>
+      <div id="sharedWithList" style="margin-bottom:16px"></div>
+      <div class="form-group">
+        <label class="form-label">Email utente</label>
+        <input class="form-control" id="shareEmail" type="email" placeholder="nome@esempio.it">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-sm btn-block" onclick="closeModal('modalShare')">Annulla</button>
+      <button class="btn btn-primary btn-block" onclick="doShareCar()">Condividi</button>
+    </div>
+  </div>
+</div>
+
 <!-- LOADER -->
 <div id="loaderOverlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(15,25,35,.85);align-items:center;justify-content:center;flex-direction:column;gap:12px;backdrop-filter:blur(4px);">
   <div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;"></div>
@@ -997,8 +1078,10 @@ select.form-control { cursor: pointer; }
 //  DATA LAYER — Firebase Firestore
 // ══════════════════════════════════════════════════════
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc }
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDoKRfu0uV9MGyJluAKOkLh-F85IKzOnCA",
@@ -1011,6 +1094,8 @@ const firebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const fdb = getFirestore(fbApp);
+const auth = getAuth(fbApp);
+const googleProvider = new GoogleAuthProvider();
 
 // Collezioni Firestore
 const CARS_COL = 'cars';
@@ -1086,22 +1171,53 @@ let state = {
   editingCarId: null,
   editingEventId: null,
   currentSottoTipo: 'ordinaria',
+  currentUser: null,
+  sharingCarId: null,
 };
 
+async function loadUserCars() {
+  const uid = state.currentUser.uid;
+  const ownedSnap = await getDocs(query(collection(fdb, CARS_COL), where('ownerId', '==', uid)));
+  const ownedCars = ownedSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+  const sharedSnap = await getDocs(query(collection(fdb, CARS_COL), where('sharedWith', 'array-contains', uid)));
+  const sharedCars = sharedSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+  const allCars = [...ownedCars];
+  for (const c of sharedCars) {
+    if (!allCars.find(x => x.id === c.id)) allCars.push(c);
+  }
+  return allCars;
+}
+
+async function loadUserEvents() {
+  const uid = state.currentUser.uid;
+  const ownedSnap = await getDocs(query(collection(fdb, EVENTS_COL), where('ownerId', '==', uid)));
+  const allEvents = ownedSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+  const sharedCars = state.cars.filter(c => c.ownerId !== uid);
+  for (const car of sharedCars) {
+    const snap = await getDocs(query(collection(fdb, EVENTS_COL), where('carId', '==', car.id)));
+    for (const d of snap.docs) {
+      if (!allEvents.find(e => e.id === d.id)) allEvents.push({ ...d.data(), id: d.id });
+    }
+  }
+  return allEvents;
+}
+
 async function loadAll() {
-  state.cars = await dbGetAll(CARS_COL);
-  state.events = await dbGetAll(EVENTS_COL);
-  const ps = await dbGet(SETTINGS_COL, 'parts');
+  const uid = state.currentUser.uid;
+  state.cars = await loadUserCars();
+  state.events = await loadUserEvents();
+  const ps = await dbGet(SETTINGS_COL, uid + '_parts');
   if (ps) state.parts = ps.value;
-  const cs = await dbGet(SETTINGS_COL, 'categories');
+  const cs = await dbGet(SETTINGS_COL, uid + '_categories');
   if (cs) state.categories = cs.value;
   if (state.cars.length > 0 && !state.currentCarId)
     state.currentCarId = state.cars[0].id;
 }
 
 async function saveSettings() {
-  await dbPut(SETTINGS_COL, { id: 'parts', key: 'parts', value: state.parts });
-  await dbPut(SETTINGS_COL, { id: 'categories', key: 'categories', value: state.categories });
+  const uid = state.currentUser.uid;
+  await dbPut(SETTINGS_COL, { id: uid + '_parts', key: 'parts', value: state.parts });
+  await dbPut(SETTINGS_COL, { id: uid + '_categories', key: 'categories', value: state.categories });
 }
 
 // ══════════════════════════════════════════════════════
@@ -1225,7 +1341,11 @@ function renderGarage() {
       <div class="car-card-actions">
         <button class="btn btn-sm" onclick="event.stopPropagation();editCar('${car.id}')">✏️ Modifica</button>
         <button class="btn btn-sm blue" onclick="event.stopPropagation();openKmModal('${car.id}')">📍 KM</button>
-        <button class="btn btn-sm danger" onclick="event.stopPropagation();deleteCar('${car.id}')">🗑</button>
+        ${car.ownerId === state.currentUser?.uid
+          ? `<button class="btn btn-sm green" onclick="event.stopPropagation();openShareModal('${car.id}')">👥 Condividi</button>
+             <button class="btn btn-sm danger" onclick="event.stopPropagation();deleteCar('${car.id}')">🗑</button>`
+          : `<span class="shared-badge">👥 Condivisa con te</span>`
+        }
       </div>
       ${bolloInfo ? `<div class="car-card-actions" style="margin-top:6px">
         <button class="btn btn-sm ${bolloInfo.cls === 'scad-ok' ? 'green' : bolloInfo.cls === 'scad-warn' ? 'gold' : 'danger'} btn-block"
@@ -1280,10 +1400,11 @@ async function saveKm() {
   await dbAdd(EVENTS_COL, {
     carId: state.currentCarId, type: 'km',
     data, km: parseInt(km), note, prezzo: null,
+    ownerId: state.currentUser.uid,
     created: Date.now()
   });
-  state.cars = await dbGetAll(CARS_COL);
-  state.events = await dbGetAll(EVENTS_COL);
+  state.cars = await loadUserCars();
+  state.events = await loadUserEvents();
   hideLoader();
   closeModal('modalKm');
   renderGarage();
@@ -1331,14 +1452,19 @@ async function saveCar() {
   };
   showLoader('Salvataggio…');
   if (state.editingCarId) {
+    const existing = state.cars.find(c => c.id === state.editingCarId);
     car.id = state.editingCarId;
+    car.ownerId = existing?.ownerId || state.currentUser.uid;
+    car.sharedWith = existing?.sharedWith || [];
     await dbPut(CARS_COL, car);
     state.editingCarId = null;
   } else {
+    car.ownerId = state.currentUser.uid;
+    car.sharedWith = [];
     const newId = await dbAdd(CARS_COL, car);
     state.currentCarId = newId;
   }
-  state.cars = await dbGetAll(CARS_COL);
+  state.cars = await loadUserCars();
   hideLoader();
   closeModal('modalCar');
   resetCarForm();
@@ -1358,13 +1484,18 @@ function resetCarForm() {
 }
 
 async function deleteCar(id) {
+  const car = state.cars.find(c => c.id === id);
+  if (car?.ownerId && car.ownerId !== state.currentUser.uid) {
+    showToast('⚠️ Solo il proprietario può eliminare questa vettura');
+    return;
+  }
   if (!confirm('Eliminare la vettura e tutti i suoi eventi?')) return;
   showLoader('Eliminazione…');
   await dbDelete(CARS_COL, id);
   const toDelete = state.events.filter(e => e.carId === id);
   for (const e of toDelete) await dbDelete(EVENTS_COL, e.id);
-  state.cars = await dbGetAll(CARS_COL);
-  state.events = await dbGetAll(EVENTS_COL);
+  state.cars = await loadUserCars();
+  state.events = await loadUserEvents();
   hideLoader();
   if (state.currentCarId === id)
     state.currentCarId = state.cars.length ? state.cars[0].id : null;
@@ -1713,7 +1844,7 @@ async function deleteEvent(id) {
   if (!confirm('Eliminare questo evento?')) return;
   showLoader('Eliminazione…');
   await dbDelete(EVENTS_COL, id);
-  state.events = await dbGetAll(EVENTS_COL);
+  state.events = await loadUserEvents();
   hideLoader();
   closeModal('modalDetail');
   renderMovimenti();
@@ -1850,6 +1981,24 @@ function renderDashboard() {
 //  SETTINGS
 // ══════════════════════════════════════════════════════
 function renderSettings() {
+  const user = state.currentUser;
+  if (user) {
+    const initial = (user.displayName || user.email || '?')[0].toUpperCase();
+    document.getElementById('settingsUserSection').innerHTML = `<div class="card" style="margin-bottom:16px">
+      <div class="d-flex" style="gap:14px;align-items:center">
+        ${user.photoURL
+          ? `<img src="${user.photoURL}" class="user-avatar" referrerpolicy="no-referrer">`
+          : `<div class="user-avatar-placeholder">${initial}</div>`
+        }
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${user.displayName || 'Utente'}</div>
+          <div class="text-sm text-muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${user.email}</div>
+        </div>
+        <button class="btn btn-sm danger" onclick="doSignOut()">Esci</button>
+      </div>
+    </div>`;
+  }
+
   const pl = document.getElementById('partsList');
   pl.innerHTML = state.parts.map((p, i) =>
     `<div class="part-item"><span class="part-item-name">${p}</span>
@@ -1906,13 +2055,12 @@ function exportData() {
 }
 
 async function resetData() {
-  if (!confirm('⚠️ Eliminare TUTTI i dati? Questa operazione è irreversibile!')) return;
-  if (!confirm('Sei sicuro? Verranno eliminate tutte le vetture e gli eventi.')) return;
+  if (!confirm('⚠️ Eliminare TUTTI i tuoi dati? Questa operazione è irreversibile!')) return;
+  if (!confirm('Sei sicuro? Verranno eliminate tutte le tue vetture e i relativi eventi.')) return;
   showLoader('Reset in corso…');
-  const allC = await dbGetAll(CARS_COL);
-  for (const c of allC) await dbDelete(CARS_COL, c.id);
-  const allE = await dbGetAll(EVENTS_COL);
-  for (const e of allE) await dbDelete(EVENTS_COL, e.id);
+  const uid = state.currentUser.uid;
+  for (const c of state.cars.filter(c => c.ownerId === uid)) await dbDelete(CARS_COL, c.id);
+  for (const e of state.events.filter(e => e.ownerId === uid)) await dbDelete(EVENTS_COL, e.id);
   state.cars = []; state.events = [];
   state.currentCarId = null;
   hideLoader();
@@ -1977,12 +2125,17 @@ function editEvent(id) {
 async function saveOrUpdateEvent(type, data) {
   showLoader('Salvataggio…');
   if (state.editingEventId) {
-    await dbPut(EVENTS_COL, { ...data, id: state.editingEventId });
+    const existing = state.events.find(e => e.id === state.editingEventId);
+    await dbPut(EVENTS_COL, {
+      ...data,
+      id: state.editingEventId,
+      ownerId: existing?.ownerId || state.currentUser.uid,
+    });
     state.editingEventId = null;
   } else {
-    await dbAdd(EVENTS_COL, data);
+    await dbAdd(EVENTS_COL, { ...data, ownerId: state.currentUser.uid });
   }
-  state.events = await dbGetAll(EVENTS_COL);
+  state.events = await loadUserEvents();
   hideLoader();
 }
 
@@ -2077,6 +2230,182 @@ function downloadIcs(titoloEnc, dataStr, descEnc) {
 }
 
 // ══════════════════════════════════════════════════════
+//  AUTH — Google Login
+// ══════════════════════════════════════════════════════
+async function signInGoogle() {
+  document.getElementById('loginError').textContent = '';
+  try {
+    await signInWithPopup(auth, googleProvider);
+  } catch(err) {
+    document.getElementById('loginError').textContent = 'Errore accesso: ' + err.message;
+  }
+}
+
+async function doSignOut() {
+  if (!confirm('Vuoi disconnetterti?')) return;
+  state.currentUser = null;
+  state.cars = []; state.events = []; state.currentCarId = null;
+  await signOut(auth);
+}
+
+function showLoginScreen() {
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('app').style.display = 'none';
+}
+
+function hideLoginScreen() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').style.display = 'flex';
+}
+
+// ══════════════════════════════════════════════════════
+//  MIGRAZIONE DATI LEGACY (senza ownerId)
+// ══════════════════════════════════════════════════════
+async function migrateData() {
+  const uid = state.currentUser.uid;
+  const allCarsSnap = await getDocs(collection(fdb, CARS_COL));
+  const legacyCars = allCarsSnap.docs.filter(d => !d.data().ownerId).map(d => ({ ...d.data(), id: d.id }));
+  if (legacyCars.length === 0) return;
+
+  const n = legacyCars.length;
+  const doMigrate = confirm(
+    `Trovat${n > 1 ? 'i' : 'o'} ${n} veicol${n > 1 ? 'i' : 'o'} senza proprietario.\nVuoi associarl${n > 1 ? 'i' : 'o'} al tuo account?`
+  );
+  if (!doMigrate) return;
+
+  showLoader('Migrazione dati…');
+  for (const car of legacyCars) {
+    await dbPut(CARS_COL, { ...car, ownerId: uid, sharedWith: [] });
+  }
+  const allEvSnap = await getDocs(collection(fdb, EVENTS_COL));
+  const legacyEvs = allEvSnap.docs.filter(d => !d.data().ownerId).map(d => ({ ...d.data(), id: d.id }));
+  for (const ev of legacyEvs) {
+    await dbPut(EVENTS_COL, { ...ev, ownerId: uid });
+  }
+  // Migra impostazioni
+  const ps = await dbGet(SETTINGS_COL, 'parts');
+  if (ps) await dbPut(SETTINGS_COL, { id: uid + '_parts', key: 'parts', value: ps.value });
+  const cs = await dbGet(SETTINGS_COL, 'categories');
+  if (cs) await dbPut(SETTINGS_COL, { id: uid + '_categories', key: 'categories', value: cs.value });
+  hideLoader();
+  showToast('✅ Dati migrati al tuo account!');
+}
+
+// ══════════════════════════════════════════════════════
+//  CONDIVISIONE VETTURA
+// ══════════════════════════════════════════════════════
+function openShareModal(carId) {
+  state.sharingCarId = carId;
+  const car = state.cars.find(c => c.id === carId);
+  if (!car) return;
+  document.getElementById('shareCarName').textContent =
+    car.marca + ' ' + car.modello + (car.targa ? ' · ' + car.targa : '');
+  document.getElementById('shareEmail').value = '';
+  renderSharedWithList(car);
+  openModal('modalShare');
+}
+
+function renderSharedWithList(car) {
+  const list = document.getElementById('sharedWithList');
+  const shared = car.sharedWith || [];
+  if (shared.length === 0) {
+    list.innerHTML = '<p class="text-sm text-muted">Nessuna condivisione attiva.</p>';
+    return;
+  }
+  list.innerHTML = `<div class="text-sm text-muted" style="margin-bottom:8px">Condiviso con:</div>` +
+    shared.map(uid => `<div class="d-flex" style="margin-bottom:6px;background:var(--bg3);padding:8px 10px;border-radius:8px;border:1px solid var(--border2)">
+      <span style="flex:1;font-size:0.85rem" id="uid-label-${uid}">${uid}</span>
+      <button class="btn btn-sm danger" style="padding:4px 10px;flex-shrink:0" onclick="unshareCarWith('${car.id}','${uid}')">✕</button>
+    </div>`).join('');
+  shared.forEach(uid => resolveUidLabel(uid));
+}
+
+async function resolveUidLabel(uid) {
+  try {
+    const snap = await dbGet('users', uid);
+    if (snap) {
+      const el = document.getElementById('uid-label-' + uid);
+      if (el) el.textContent = snap.displayName
+        ? snap.displayName + ' (' + snap.email + ')'
+        : (snap.email || uid);
+    }
+  } catch(e) {}
+}
+
+async function doShareCar() {
+  const email = document.getElementById('shareEmail').value.trim().toLowerCase();
+  if (!email) { showToast('⚠️ Inserisci un\'email'); return; }
+  if (email === (state.currentUser.email || '').toLowerCase()) {
+    showToast('⚠️ Sei già il proprietario'); return;
+  }
+  const carId = state.sharingCarId;
+  const car = state.cars.find(c => c.id === carId);
+  if (!car) return;
+
+  showLoader('Ricerca utente…');
+  try {
+    const snap = await getDocs(query(collection(fdb, 'users'), where('email', '==', email)));
+    if (snap.empty) {
+      hideLoader();
+      showToast('⚠️ Utente non trovato. Deve prima aprire l\'app.');
+      return;
+    }
+    const targetUid = snap.docs[0].id;
+    const sharedWith = [...(car.sharedWith || [])];
+    if (sharedWith.includes(targetUid)) {
+      hideLoader();
+      showToast('ℹ️ Già condiviso con questo utente');
+      return;
+    }
+    sharedWith.push(targetUid);
+    await dbPut(CARS_COL, { ...car, sharedWith });
+
+    // Propaga sharedWith sugli eventi della vettura
+    const carEvs = state.events.filter(e => e.carId === carId);
+    for (const ev of carEvs) {
+      const evShared = [...(ev.sharedWith || [])];
+      if (!evShared.includes(targetUid)) {
+        evShared.push(targetUid);
+        await dbPut(EVENTS_COL, { ...ev, sharedWith: evShared });
+      }
+    }
+
+    state.cars = await loadUserCars();
+    state.events = await loadUserEvents();
+    hideLoader();
+    closeModal('modalShare');
+    renderGarage();
+    showToast('✅ Vettura condivisa con ' + email);
+  } catch(err) {
+    hideLoader();
+    showToast('❌ Errore: ' + err.message);
+  }
+}
+
+async function unshareCarWith(carId, targetUid) {
+  if (!confirm('Rimuovere l\'accesso a questa vettura?')) return;
+  const car = state.cars.find(c => c.id === carId);
+  if (!car) return;
+  showLoader('Rimozione condivisione…');
+  const sharedWith = (car.sharedWith || []).filter(u => u !== targetUid);
+  await dbPut(CARS_COL, { ...car, sharedWith });
+
+  const carEvs = state.events.filter(e => e.carId === carId);
+  for (const ev of carEvs) {
+    if ((ev.sharedWith || []).includes(targetUid)) {
+      await dbPut(EVENTS_COL, { ...ev, sharedWith: ev.sharedWith.filter(u => u !== targetUid) });
+    }
+  }
+
+  state.cars = await loadUserCars();
+  state.events = await loadUserEvents();
+  hideLoader();
+  closeModal('modalShare');
+  renderGarage();
+  showToast('✅ Condivisione rimossa');
+}
+
+// ══════════════════════════════════════════════════════
 //  LONG PRESS — 600ms
 // ══════════════════════════════════════════════════════
 function attachLongPress() {
@@ -2151,18 +2480,36 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 // Set default date on car form
 document.getElementById('car_km_data').value = today();
 
-async function init() {
-  showLoader('Connessione a Firebase…');
-  try {
-    await loadAll();
-  } catch(err) {
-    hideLoader();
-    document.getElementById('loaderOverlay').style.display = 'flex';
-    document.getElementById('loaderMsg').textContent = '❌ Errore Firebase: ' + err.message;
-    return;
-  }
-  hideLoader();
-  renderGarage();
+function init() {
+  showLoader('Accesso in corso…');
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      state.currentUser = user;
+      hideLoginScreen();
+      // Salva profilo utente nella collezione users (per risoluzione email→uid)
+      await setDoc(doc(fdb, 'users', user.uid), {
+        email: (user.email || '').toLowerCase(),
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+      }, { merge: true });
+      showLoader('Caricamento…');
+      try {
+        await migrateData();
+        await loadAll();
+      } catch(err) {
+        hideLoader();
+        document.getElementById('loaderOverlay').style.display = 'flex';
+        document.getElementById('loaderMsg').textContent = '❌ Errore Firebase: ' + err.message;
+        return;
+      }
+      hideLoader();
+      renderGarage();
+    } else {
+      state.currentUser = null;
+      hideLoader();
+      showLoginScreen();
+    }
+  });
 }
 
 // ── Esponi tutte le funzioni a window (necessario con type="module") ──
@@ -2203,6 +2550,11 @@ window.addToCalendar = addToCalendar;
 window.downloadIcs = downloadIcs;
 window.scadenzaInfo = scadenzaInfo;
 window.state = state;
+window.signInGoogle = signInGoogle;
+window.doSignOut = doSignOut;
+window.openShareModal = openShareModal;
+window.doShareCar = doShareCar;
+window.unshareCarWith = unshareCarWith;
 
 init();
 </script>
