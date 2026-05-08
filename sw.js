@@ -1,4 +1,4 @@
-const CACHE = 'autotrack-v11';
+const CACHE = 'autotrack-v12';
 const ASSETS = [
   '/Autotrack/',
   '/Autotrack/index.html',
@@ -27,7 +27,7 @@ self.addEventListener('fetch', e => {
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(resp => {
-        if (resp && resp.status === 200 && resp.type !== 'opaque') {
+        if (resp && resp.status === 200 && resp.type !== 'opaque' && e.request.method === 'GET') {
           const clone = resp.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
