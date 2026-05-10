@@ -206,7 +206,7 @@ body {
 .car-badge.gold { background: var(--gold); }
 
 .car-card-actions {
-  display: flex; gap: 8px; margin-top: 12px;
+  display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
 }
 
 /* ── BUTTONS ────────────────────────────────────────── */
@@ -630,6 +630,17 @@ select.form-control { cursor: pointer; }
       </div>
 
       <div class="card">
+        <div class="card-header"><span style="font-weight:600">🔧 Officine Preferite</span></div>
+        <p class="text-sm text-muted" style="margin-bottom:12px">Salva le officine di fiducia per richiamarle rapidamente durante l'inserimento interventi.</p>
+        <div id="workshopsList"></div>
+        <div class="d-flex mt-12" style="gap:8px;flex-wrap:wrap">
+          <input class="form-control" id="newWorkshopNome" placeholder="Nome officina..." style="flex:2;min-width:120px">
+          <input class="form-control" id="newWorkshopTel" placeholder="Telefono" style="flex:1;min-width:90px">
+          <button class="btn btn-sm accent" onclick="addWorkshop()">＋</button>
+        </div>
+      </div>
+
+      <div class="card">
         <p class="text-sm text-muted" style="margin-bottom:12px">⚠️ Esporta o reimposta tutti i dati.</p>
         <div class="d-flex" style="gap:8px">
           <button class="btn btn-sm green btn-block" onclick="exportData()">📤 Esporta JSON</button>
@@ -881,6 +892,7 @@ select.form-control { cursor: pointer; }
       </div>
       <div class="form-group">
         <label class="form-label">Officina / Meccanico</label>
+        <div id="workshopChipsSvc" class="chip-group" style="margin-bottom:6px"></div>
         <input class="form-control" id="svc_officina" placeholder="Mario Rossi Autofficina">
       </div>
       <div class="form-group">
@@ -966,6 +978,7 @@ select.form-control { cursor: pointer; }
         </div>
         <div class="form-group">
           <label class="form-label">Officina / Gommista</label>
+          <div id="workshopChipsTyre" class="chip-group" style="margin-bottom:6px"></div>
           <input class="form-control" id="tyre_officina" placeholder="">
         </div>
       </div>
@@ -1167,6 +1180,7 @@ let state = {
   events: [],
   parts: [...defaultParts],
   categories: [...defaultCategories],
+  workshops: [],
   currentCarId: null,
   selectedParts: [],
   editingCarId: null,
@@ -1211,6 +1225,8 @@ async function loadAll() {
   if (ps) state.parts = ps.value;
   const cs = await dbGet(SETTINGS_COL, uid + '_categories');
   if (cs) state.categories = cs.value;
+  const ws = await dbGet(SETTINGS_COL, uid + '_workshops');
+  if (ws) state.workshops = ws.value;
   if (state.cars.length > 0 && !state.currentCarId)
     state.currentCarId = state.cars[0].id;
 }
@@ -1219,6 +1235,7 @@ async function saveSettings() {
   const uid = state.currentUser.uid;
   await dbPut(SETTINGS_COL, { id: uid + '_parts', key: 'parts', value: state.parts });
   await dbPut(SETTINGS_COL, { id: uid + '_categories', key: 'categories', value: state.categories });
+  await dbPut(SETTINGS_COL, { id: uid + '_workshops', key: 'workshops', value: state.workshops });
 }
 
 // ══════════════════════════════════════════════════════
@@ -1656,6 +1673,7 @@ function openServiceModal(sottoTipo = 'ordinaria') {
   state.currentSottoTipo = sottoTipo;
   setSottoTipo(sottoTipo);
   renderPartsChips();
+  renderWorkshopChips('workshopChipsSvc', 'svc_officina');
   openModal('modalService');
 }
 
@@ -1745,6 +1763,7 @@ function openTyreModal() {
   );
   document.getElementById('tyre_stagione').value = 'Estivi';
   document.getElementById('tyre_qty').value = '4';
+  renderWorkshopChips('workshopChipsTyre', 'tyre_officina');
   openModal('modalTyre');
 }
 
@@ -2011,6 +2030,18 @@ function renderSettings() {
     `<div class="part-item"><span class="part-item-name">${c}</span>
     <span class="part-item-remove" onclick="removeMasterCategory(${i})">✕</span></div>`
   ).join('');
+
+  const wl = document.getElementById('workshopsList');
+  if (wl) {
+    wl.innerHTML = state.workshops.length
+      ? state.workshops.map((w, i) =>
+          `<div class="part-item">
+            <span class="part-item-name">${w.nome}${w.tel ? '<span class="text-muted" style="font-size:0.78rem;margin-left:8px">📞 ' + w.tel + '</span>' : ''}</span>
+            <span class="part-item-remove" onclick="removeWorkshop(${i})">✕</span>
+          </div>`
+        ).join('')
+      : '<p class="text-sm text-muted">Nessuna officina salvata.</p>';
+  }
 }
 
 async function addCustomPart() {
@@ -2043,6 +2074,36 @@ async function removeMasterCategory(i) {
   state.categories.splice(i, 1);
   await saveSettings();
   renderSettings();
+}
+
+async function addWorkshop() {
+  const nome = document.getElementById('newWorkshopNome').value.trim();
+  const tel = document.getElementById('newWorkshopTel').value.trim();
+  if (!nome) { showToast('⚠️ Inserisci almeno il nome'); return; }
+  if (state.workshops.find(w => w.nome === nome)) { showToast('⚠️ Officina già presente'); return; }
+  state.workshops.push({ nome, tel });
+  await saveSettings();
+  document.getElementById('newWorkshopNome').value = '';
+  document.getElementById('newWorkshopTel').value = '';
+  renderSettings();
+  showToast('✅ Officina aggiunta');
+}
+
+async function removeWorkshop(i) {
+  state.workshops.splice(i, 1);
+  await saveSettings();
+  renderSettings();
+}
+
+function renderWorkshopChips(containerId, inputId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!state.workshops.length) { el.innerHTML = ''; return; }
+  el.innerHTML = state.workshops.map(w =>
+    `<span class="chip" style="cursor:pointer" onclick="document.getElementById('${inputId}').value='${w.nome.replace(/'/g, "\\'")}';
+      document.querySelectorAll('#${containerId} .chip').forEach(c=>c.classList.remove('chip-active'));
+      this.classList.add('chip-active')" title="${w.tel ? '📞 ' + w.tel : ''}">${w.nome}${w.tel ? ' 📞' : ''}</span>`
+  ).join('');
 }
 
 function exportData() {
@@ -2098,6 +2159,7 @@ function editEvent(id) {
     state.currentSottoTipo = e.sottoTipo || 'ordinaria';
     setSottoTipo(state.currentSottoTipo);
     renderPartsChips();
+    renderWorkshopChips('workshopChipsSvc', 'svc_officina');
     openModal('modalService');
   } else if (e.type === 'tyre') {
     document.getElementById('tyre_data').value = e.data || '';
@@ -2109,6 +2171,7 @@ function editEvent(id) {
     document.getElementById('tyre_prezzo').value = e.prezzo || '';
     document.getElementById('tyre_officina').value = e.officina || '';
     document.getElementById('tyre_note').value = e.note || '';
+    renderWorkshopChips('workshopChipsTyre', 'tyre_officina');
     openModal('modalTyre');
   } else if (e.type === 'other') {
     document.getElementById('oth_data').value = e.data || '';
@@ -2542,6 +2605,8 @@ window.addCustomPart = addCustomPart;
 window.removeMasterPart = removeMasterPart;
 window.addCustomCategory = addCustomCategory;
 window.removeMasterCategory = removeMasterCategory;
+window.addWorkshop = addWorkshop;
+window.removeWorkshop = removeWorkshop;
 window.exportData = exportData;
 window.resetData = resetData;
 window.renderMovimenti = renderMovimenti;
