@@ -1112,6 +1112,8 @@ import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, deleteD
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDoKRfu0uV9MGyJluAKOkLh-F85IKzOnCA",
@@ -1125,7 +1127,10 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const fdb = getFirestore(fbApp);
 const auth = getAuth(fbApp);
+const storage = getStorage(fbApp);
 const googleProvider = new GoogleAuthProvider();
+
+const MAX_ATTACHMENT_MB = 8;
 
 // Collezioni Firestore
 const CARS_COL = 'cars';
@@ -1684,7 +1689,81 @@ function eventItem(e) {
       <div class="event-meta">${meta} <span class="tag ${tags[e.type]}">${labels[e.type]}</span></div>
     </div>
     ${e.prezzo ? `<div class="event-price">${fmtEuro(e.prezzo)}</div>` : ''}
+    ${e.allegati && e.allegati.length ? `<span class="text-sm text-muted" style="margin-left:6px">📎 ${e.allegati.length}</span>` : ''}
   </div>`;
+}
+
+// ══════════════════════════════════════════════════════
+//  ALLEGATI (Firebase Storage)
+// ══════════════════════════════════════════════════════
+function sanitizeFileName(name) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function renderAttachmentsList(e) {
+  const list = e.allegati || [];
+  if (!list.length) return '<p class="text-sm text-muted">Nessun allegato.</p>';
+  return `<div class="parts-list">${list.map((a, i) => `
+    <div class="part-item">
+      <a class="part-item-name" href="${a.url}" target="_blank" rel="noopener" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        📎 ${a.name}
+      </a>
+      <span class="part-item-remove" onclick="deleteAttachment('${e.id}', ${i})">✕</span>
+    </div>`).join('')}</div>`;
+}
+
+async function handleAttachmentUpload(eventId, fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  for (const f of files) {
+    if (f.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
+      showToast(`⚠️ "${f.name}" supera ${MAX_ATTACHMENT_MB}MB, saltato`);
+    }
+  }
+  const validFiles = files.filter(f => f.size <= MAX_ATTACHMENT_MB * 1024 * 1024);
+  if (!validFiles.length) return;
+  showLoader('Caricamento allegati…');
+  try {
+    const e = state.events.find(ev => ev.id === eventId);
+    const nuovi = [];
+    for (const f of validFiles) {
+      const path = `attachments/${eventId}/${Date.now()}_${sanitizeFileName(f.name)}`;
+      const sref = storageRef(storage, path);
+      await uploadBytes(sref, f);
+      const url = await getDownloadURL(sref);
+      nuovi.push({ path, url, name: f.name, size: f.size, contentType: f.type, uploadedAt: Date.now() });
+    }
+    const allegati = [...(e.allegati || []), ...nuovi];
+    await dbPut(EVENTS_COL, { ...e, allegati });
+    state.events = await loadUserEvents();
+    showEventDetail(eventId);
+    renderMovimenti();
+    showToast('📎 Allegato caricato!');
+  } catch (err) {
+    showToast('⚠️ Errore caricamento: ' + err.message);
+  } finally {
+    hideLoader();
+  }
+}
+
+async function deleteAttachment(eventId, index) {
+  if (!confirm('Eliminare questo allegato?')) return;
+  const e = state.events.find(ev => ev.id === eventId);
+  const a = (e.allegati || [])[index];
+  if (!a) return;
+  showLoader('Eliminazione…');
+  try {
+    await deleteObject(storageRef(storage, a.path));
+  } catch (err) {
+    // se il file non esiste più su Storage, procede comunque a rimuovere il riferimento
+  }
+  const allegati = (e.allegati || []).filter((_, i) => i !== index);
+  await dbPut(EVENTS_COL, { ...e, allegati });
+  state.events = await loadUserEvents();
+  hideLoader();
+  showEventDetail(eventId);
+  renderMovimenti();
+  showToast('🗑 Allegato eliminato');
 }
 
 function openFuelModal() {
@@ -1913,6 +1992,17 @@ function showEventDetail(id) {
     if (e.descrizione) html += `<div class="summary-row"><span class="label">Descrizione</span><span class="value">${e.descrizione}</span></div>`;
   }
   if (e.note) html += `<div class="summary-row"><span class="label">Note</span><span class="value" style="max-width:60%;text-align:right;font-size:0.8rem">${e.note}</span></div>`;
+
+  html += `<div class="divider"></div>
+    <div class="flex-between" style="margin-bottom:8px">
+      <span style="font-weight:600;font-size:0.88rem">📎 Allegati</span>
+    </div>
+    ${renderAttachmentsList(e)}
+    <div class="d-flex mt-12" style="gap:8px">
+      <input class="form-control" type="file" id="attachmentInput" multiple accept="image/*,application/pdf"
+        onchange="handleAttachmentUpload('${e.id}', this.files)">
+    </div>`;
+
   document.getElementById('detailBody').innerHTML = html;
   document.getElementById('detailDeleteBtn').onclick = () => deleteEvent(e.id);
   document.getElementById('detailEditBtn').onclick = () => editEvent(e.id);
