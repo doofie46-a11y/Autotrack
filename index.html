@@ -768,6 +768,16 @@ select.form-control { cursor: pointer; }
           </select>
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">🛡️ Ultimo rinnovo RCA</label>
+          <input class="form-control" type="date" id="car_assicurazione">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo RCA €</label>
+          <input class="form-control" type="number" step="0.01" id="car_assicurazione_importo" placeholder="450.00">
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-sm btn-block" onclick="closeModal('modalCar')">Annulla</button>
@@ -877,6 +887,10 @@ select.form-control { cursor: pointer; }
           <button id="btnOrdinaria" class="btn btn-sm gold btn-block active-type" onclick="setSottoTipo('ordinaria')" style="padding:12px">🔧 Ordinaria</button>
           <button id="btnStraordinaria" class="btn btn-sm blue btn-block" onclick="setSottoTipo('straordinaria')" style="padding:12px">⚡ Straordinaria</button>
         </div>
+      </div>
+      <div class="form-group" id="tagliandoCheckRow" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="svc_tagliando" checked style="width:18px;height:18px;accent-color:var(--gold)">
+        <label class="form-label" for="svc_tagliando" style="margin:0">🔧 Tagliando</label>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -1293,6 +1307,24 @@ function carLastKm(carId) {
   return Math.max(carKm, maxEvKm);
 }
 
+// Un evento "conta" come tagliando se marcato esplicitamente (campo `tagliando`,
+// introdotto per distinguere un tagliando completo da una manutenzione ordinaria
+// puntuale come un cambio batteria). Per gli eventi salvati prima di questo campo
+// (undefined), si presume tagliando solo se tra i pezzi c'è "Olio motore".
+function isTagliando(e) {
+  if (e.tagliando !== undefined) return !!e.tagliando;
+  return (e.pezzi || []).includes('Olio motore');
+}
+
+function carLastTagliando(carId) {
+  const evs = carEvents(carId).filter(e => e.type === 'service' && e.sottoTipo !== 'straordinaria' && isTagliando(e));
+  if (!evs.length) return null;
+  return [...evs].sort((a, b) => {
+    const cmp = (b.data || '').localeCompare(a.data || '');
+    return cmp !== 0 ? cmp : (b.created || 0) - (a.created || 0);
+  })[0];
+}
+
 // ══════════════════════════════════════════════════════
 //  GARAGE
 // ══════════════════════════════════════════════════════
@@ -1332,6 +1364,10 @@ function renderGarage() {
     const bolloInfo = scadenzaInfo(car.bollo, 1);
     // Revisione: biennale (se prima immatricolazione, 4 anni la prima volta — ma gestiamo sempre dal campo ultima revisione → 2 anni)
     const revInfo = scadenzaInfo(car.revisione, 2);
+    // RCA: rinnovo annuale
+    const assicInfo = scadenzaInfo(car.assicurazione, 1);
+    // Tagliando: ultima manutenzione ordinaria registrata (nessuna scadenza fissa, solo l'ultimo dato noto)
+    const lastTagliando = carLastTagliando(car.id);
 
     const bolloBadge = bolloInfo ? `<span class="scad-badge ${bolloInfo.cls}">
       📋 Bollo: ${bolloInfo.diffGiorni < 0 ? 'Scaduto!' : bolloInfo.diffGiorni === 0 ? 'Oggi!' : 'entro ' + bolloInfo.label}
@@ -1339,6 +1375,12 @@ function renderGarage() {
     const revBadge = revInfo ? `<span class="scad-badge ${revInfo.cls}">
       🔍 Revisione: ${revInfo.diffGiorni < 0 ? 'Scaduta!' : revInfo.diffGiorni === 0 ? 'Oggi!' : 'entro ' + revInfo.label}
     </span>` : '';
+    const assicBadge = assicInfo ? `<span class="scad-badge ${assicInfo.cls}">
+      🛡️ RCA: ${assicInfo.diffGiorni < 0 ? 'Scaduta!' : assicInfo.diffGiorni === 0 ? 'Oggi!' : 'entro ' + assicInfo.label}
+    </span>` : '';
+    const tagliandoBadge = lastTagliando
+      ? `<span class="scad-badge scad-ok">🔧 Ultimo tagliando: ${fmtDate(lastTagliando.data)} · ${fmtKm(lastTagliando.km)}</span>`
+      : `<span class="scad-badge scad-warn">🔧 Nessun tagliando registrato</span>`;
 
     return `<div class="car-card ${isSel ? 'selected' : ''}"
       onclick="selectCar('${car.id}')"
@@ -1354,7 +1396,7 @@ function renderGarage() {
         ${car.carburante ? '<span>⛽ ' + car.carburante + '</span>' : ''}
       </div>
       <div class="car-card-km">📍 ${fmtKm(km)}</div>
-      ${bolloBadge || revBadge ? `<div class="d-flex mt-12" style="gap:6px;flex-wrap:wrap">${bolloBadge}${revBadge}</div>` : ''}
+      <div class="d-flex mt-12" style="gap:6px;flex-wrap:wrap">${tagliandoBadge}${bolloBadge}${revBadge}${assicBadge}</div>
       <div class="d-flex mt-12" style="justify-content:space-between;align-items:center">
         <span class="text-sm text-muted">${evs.length} eventi · ${fmtEuro(totSpesa)}</span>
       </div>
@@ -1377,6 +1419,12 @@ function renderGarage() {
         <button class="btn btn-sm ${revInfo.cls === 'scad-ok' ? 'green' : revInfo.cls === 'scad-warn' ? 'gold' : 'danger'} btn-block"
           onclick="event.stopPropagation();addToCalendar('revisione','${car.id}')">
           🔍 Promemoria revisione
+        </button>
+      </div>` : ''}
+      ${assicInfo ? `<div class="car-card-actions" style="margin-top:6px">
+        <button class="btn btn-sm ${assicInfo.cls === 'scad-ok' ? 'green' : assicInfo.cls === 'scad-warn' ? 'gold' : 'danger'} btn-block"
+          onclick="event.stopPropagation();addToCalendar('assicurazione','${car.id}')">
+          🛡️ Promemoria RCA
         </button>
       </div>` : ''}
     </div>`;
@@ -1449,6 +1497,8 @@ function editCar(id) {
   document.getElementById('car_bollo_importo').value = car.bollo_importo || '';
   document.getElementById('car_revisione').value = car.revisione || '';
   document.getElementById('car_prima_immatric').value = car.prima_immatric || '';
+  document.getElementById('car_assicurazione').value = car.assicurazione || '';
+  document.getElementById('car_assicurazione_importo').value = car.assicurazione_importo || '';
   openModal('modalCar');
 }
 
@@ -1469,6 +1519,8 @@ async function saveCar() {
     bollo_importo: document.getElementById('car_bollo_importo').value || null,
     revisione: document.getElementById('car_revisione').value || null,
     prima_immatric: document.getElementById('car_prima_immatric').value || null,
+    assicurazione: document.getElementById('car_assicurazione').value || null,
+    assicurazione_importo: document.getElementById('car_assicurazione_importo').value || null,
   };
   showLoader('Salvataggio…');
   if (state.editingCarId) {
@@ -1494,7 +1546,7 @@ async function saveCar() {
 
 function resetCarForm() {
   ['car_marca','car_modello','car_anno','car_targa','car_cc','car_note','car_km',
-   'car_bollo','car_bollo_importo','car_revisione'].forEach(id => {
+   'car_bollo','car_bollo_importo','car_revisione','car_assicurazione','car_assicurazione_importo'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('car_km_data').value = today();
@@ -1671,6 +1723,7 @@ function openServiceModal(sottoTipo = 'ordinaria') {
   document.getElementById('svc_data').value = today();
   ['svc_km','svc_tipo','svc_officina','svc_note'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('svc_prezzo').value = '';
+  document.getElementById('svc_tagliando').checked = true;
   state.selectedParts = [];
   state.currentSottoTipo = sottoTipo;
   setSottoTipo(sottoTipo);
@@ -1683,14 +1736,17 @@ function setSottoTipo(tipo) {
   state.currentSottoTipo = tipo;
   const btnO = document.getElementById('btnOrdinaria');
   const btnS = document.getElementById('btnStraordinaria');
+  const tagliandoRow = document.getElementById('tagliandoCheckRow');
   if (tipo === 'ordinaria') {
     btnO.classList.add('active-type');
     btnS.classList.remove('active-type');
     document.getElementById('modalServiceTitle').textContent = '🔧 Manutenzione Ordinaria';
+    tagliandoRow.style.display = 'flex';
   } else {
     btnS.classList.add('active-type');
     btnO.classList.remove('active-type');
     document.getElementById('modalServiceTitle').textContent = '⚡ Manutenzione Straordinaria';
+    tagliandoRow.style.display = 'none';
   }
 }
 
@@ -1748,6 +1804,7 @@ async function saveService() {
     tipo: document.getElementById('svc_tipo').value,
     officina: document.getElementById('svc_officina').value,
     pezzi: [...state.selectedParts],
+    tagliando: document.getElementById('svc_tagliando').checked,
     note: document.getElementById('svc_note').value,
     created: Date.now()
   });
@@ -2157,6 +2214,7 @@ function editEvent(id) {
     document.getElementById('svc_officina').value = e.officina || '';
     document.getElementById('svc_prezzo').value = e.prezzo || '';
     document.getElementById('svc_note').value = e.note || '';
+    document.getElementById('svc_tagliando').checked = isTagliando(e);
     state.selectedParts = [...(e.pezzi || [])];
     state.currentSottoTipo = e.sottoTipo || 'ordinaria';
     setSottoTipo(state.currentSottoTipo);
@@ -2211,19 +2269,22 @@ async function saveOrUpdateEvent(type, data) {
 function addToCalendar(tipo, carId) {
   const car = state.cars.find(c => c.id === carId);
   if (!car) return;
-  const isBollo = tipo === 'bollo';
-  const dataUltima = isBollo ? car.bollo : car.revisione;
-  if (!dataUltima) { showToast('⚠️ Inserisci prima la data ' + (isBollo ? 'ultimo bollo' : 'ultima revisione')); return; }
-  const anni = 1; // bollo annuale, revisione biennale
-  const intervalloAnni = isBollo ? 1 : 2;
+  const CAMPO = { bollo: 'bollo', revisione: 'revisione', assicurazione: 'assicurazione' };
+  const LABEL_ULTIMA = { bollo: 'ultimo bollo', revisione: 'ultima revisione', assicurazione: 'ultimo rinnovo RCA' };
+  const INTERVALLO_ANNI = { bollo: 1, revisione: 2, assicurazione: 1 };
+  const dataUltima = car[CAMPO[tipo]];
+  if (!dataUltima) { showToast('⚠️ Inserisci prima la data ' + LABEL_ULTIMA[tipo]); return; }
+  const intervalloAnni = INTERVALLO_ANNI[tipo];
   const ultima = new Date(dataUltima + 'T00:00:00');
   const prossima = new Date(ultima);
   prossima.setFullYear(prossima.getFullYear() + intervalloAnni);
   const nome = `${car.marca} ${car.modello}${car.targa ? ' (' + car.targa + ')' : ''}`;
-  const titolo = isBollo ? `📋 Bollo auto — ${nome}` : `🔍 Revisione auto — ${nome}`;
-  const desc = isBollo
+  const titolo = { bollo: `📋 Bollo auto — ${nome}`, revisione: `🔍 Revisione auto — ${nome}`, assicurazione: `🛡️ Assicurazione RCA — ${nome}` }[tipo];
+  const desc = tipo === 'bollo'
     ? `Scadenza bollo annuale per ${nome}.${car.bollo_importo ? ' Importo anno scorso: €' + car.bollo_importo : ''}`
-    : `Scadenza revisione biennale per ${nome}.`;
+    : tipo === 'assicurazione'
+      ? `Scadenza RCA annuale per ${nome}.${car.assicurazione_importo ? ' Importo ultimo rinnovo: €' + car.assicurazione_importo : ''}`
+      : `Scadenza revisione biennale per ${nome}.`;
 
   // Formato data per Google Calendar: YYYYMMDD
   const fmt = d => d.toISOString().split('T')[0].replace(/-/g,'');
