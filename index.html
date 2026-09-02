@@ -888,6 +888,10 @@ select.form-control { cursor: pointer; }
           <button id="btnStraordinaria" class="btn btn-sm blue btn-block" onclick="setSottoTipo('straordinaria')" style="padding:12px">⚡ Straordinaria</button>
         </div>
       </div>
+      <div class="form-group" id="tagliandoCheckRow" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="svc_tagliando" checked style="width:18px;height:18px;accent-color:var(--gold)">
+        <label class="form-label" for="svc_tagliando" style="margin:0">🔧 È un tagliando completo</label>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Data *</label>
@@ -1303,8 +1307,17 @@ function carLastKm(carId) {
   return Math.max(carKm, maxEvKm);
 }
 
+// Un evento "conta" come tagliando se marcato esplicitamente (campo `tagliando`,
+// introdotto per distinguere un tagliando completo da una manutenzione ordinaria
+// puntuale come un cambio batteria). Per gli eventi salvati prima di questo campo
+// (undefined), si presume tagliando solo se tra i pezzi c'è "Olio motore".
+function isTagliando(e) {
+  if (e.tagliando !== undefined) return !!e.tagliando;
+  return (e.pezzi || []).includes('Olio motore');
+}
+
 function carLastTagliando(carId) {
-  const evs = carEvents(carId).filter(e => e.type === 'service' && e.sottoTipo !== 'straordinaria');
+  const evs = carEvents(carId).filter(e => e.type === 'service' && e.sottoTipo !== 'straordinaria' && isTagliando(e));
   if (!evs.length) return null;
   return [...evs].sort((a, b) => {
     const cmp = (b.data || '').localeCompare(a.data || '');
@@ -1710,6 +1723,7 @@ function openServiceModal(sottoTipo = 'ordinaria') {
   document.getElementById('svc_data').value = today();
   ['svc_km','svc_tipo','svc_officina','svc_note'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('svc_prezzo').value = '';
+  document.getElementById('svc_tagliando').checked = true;
   state.selectedParts = [];
   state.currentSottoTipo = sottoTipo;
   setSottoTipo(sottoTipo);
@@ -1722,14 +1736,17 @@ function setSottoTipo(tipo) {
   state.currentSottoTipo = tipo;
   const btnO = document.getElementById('btnOrdinaria');
   const btnS = document.getElementById('btnStraordinaria');
+  const tagliandoRow = document.getElementById('tagliandoCheckRow');
   if (tipo === 'ordinaria') {
     btnO.classList.add('active-type');
     btnS.classList.remove('active-type');
     document.getElementById('modalServiceTitle').textContent = '🔧 Manutenzione Ordinaria';
+    tagliandoRow.style.display = 'flex';
   } else {
     btnS.classList.add('active-type');
     btnO.classList.remove('active-type');
     document.getElementById('modalServiceTitle').textContent = '⚡ Manutenzione Straordinaria';
+    tagliandoRow.style.display = 'none';
   }
 }
 
@@ -1787,6 +1804,7 @@ async function saveService() {
     tipo: document.getElementById('svc_tipo').value,
     officina: document.getElementById('svc_officina').value,
     pezzi: [...state.selectedParts],
+    tagliando: document.getElementById('svc_tagliando').checked,
     note: document.getElementById('svc_note').value,
     created: Date.now()
   });
@@ -2196,6 +2214,7 @@ function editEvent(id) {
     document.getElementById('svc_officina').value = e.officina || '';
     document.getElementById('svc_prezzo').value = e.prezzo || '';
     document.getElementById('svc_note').value = e.note || '';
+    document.getElementById('svc_tagliando').checked = isTagliando(e);
     state.selectedParts = [...(e.pezzi || [])];
     state.currentSottoTipo = e.sottoTipo || 'ordinaria';
     setSottoTipo(state.currentSottoTipo);
